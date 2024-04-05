@@ -2,53 +2,79 @@ package scraper
 
 import (
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/context"
+	"io"
 	"net/http"
 	"strings"
-
-	"golang.org/x/net/html"
+	"sync"
 )
+
+var linkCache sync.Map // Cache for the links
 
 // ExtractLinks mengambil semua link dari halaman web Wikipedia
 func ExtractLinks(url string) ([]string, error) {
-	// Mendapatkan isi halaman web
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("gagal melakukan GET request: %v", err)
+		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}(resp.Body)
 
-	// Parsing HTML
-	doc, err := html.Parse(resp.Body)
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("gagal melakukan parsing HTML: %v", err)
+		return nil, err
 	}
 
-	// Mengambil semua link dari dokumen
-	links := extractLinks(doc)
+	var links []string
+	doc.Find("a").Each(func(i int, s *goquery.Selection) {
+		href, exists := s.Attr("href")
+		if exists {
+			if !strings.HasPrefix(href, "#") && strings.HasPrefix(href, "/wiki/") && !strings.Contains(href, ":") {
+				links = append(links, href)
+			}
+		}
+	})
 
 	return links, nil
 }
 
 // Fungsi rekursif untuk mengekstrak link dari node HTML
-func extractLinks(n *html.Node) []string {
-	var links []string
-	if n.Type == html.ElementNode && n.Data == "a" {
-		for _, attr := range n.Attr {
-			if attr.Key == "href" {
-				link := strings.TrimSpace(attr.Val)
-				
-				// Pastikan link bukan merupakan link internal Wikipedia (misalnya, tidak dimulai dengan "#")
-				if !strings.HasPrefix(link, "#") && strings.HasPrefix(link, "/wiki/") && !strings.Contains(link, ":"){
-					links = append(links, link)
-				}
-				break
-			}
+
+func ExtractLinksAsync(ctx context.Context, url string) ([]string, error) {
+	// Check the cache before making an HTTP request
+	if links, ok := linkCache.Load(url); ok {
+		return links.([]string), nil
+	}
+
+	result := make(chan []string, 1)
+	errResult := make(chan error, 1)
+
+	go func() {
+		defer close(result)
+		defer close(errResult)
+		links, err := ExtractLinks(url)
+		if err != nil {
+			errResult <- err
+			return
 		}
+		// Store the links in the cache
+		linkCache.Store(url, links)
+		result <- links
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case links := <-result:
+		return links, nil
+	case err := <-errResult:
+		return nil, err
 	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		links = append(links, extractLinks(c)...)
-	}
-	return makeUnique(links)
 }
 
 func makeUnique(links []string) []string {

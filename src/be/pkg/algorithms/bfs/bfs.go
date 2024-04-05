@@ -1,94 +1,18 @@
 package bfs
 
 import (
+	"be/pkg/scraper"
+	"be/pkg/tree"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"io"
-	"net/http"
-	"strings"
-	_ "sync"
 )
 
-type Node struct {
-	Value    string
-	Children []*Node
-	Parent   *Node
-}
+const MaxGoroutines = 50 // Lower the limit of goroutines
 
-func NewNode(value string) *Node {
-	return &Node{
-		Value:    value,
-		Children: []*Node{},
-		Parent:   nil,
-	}
-}
-
-func (n *Node) AddChild(child *Node) {
-	n.Children = append(n.Children, child)
-}
-
-func ExtractLinks(url string) ([]string, error) {
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			fmt.Println(err)
-		}
-	}(resp.Body)
-
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var links []string
-	doc.Find("a").Each(func(i int, s *goquery.Selection) {
-		href, exists := s.Attr("href")
-		if exists {
-			if !strings.HasPrefix(href, "#") && strings.HasPrefix(href, "/wiki/") && !strings.Contains(href, ":") {
-				links = append(links, href)
-			}
-		}
-	})
-
-	return links, nil
-}
-
-func ExtractLinksAsync(ctx context.Context, url string) ([]string, error) {
-	result := make(chan []string, 1)
-	errResult := make(chan error, 1)
-
-	go func() {
-		defer close(result)
-		defer close(errResult)
-		links, err := ExtractLinks(url)
-		if err != nil {
-			errResult <- err
-			return
-		}
-		result <- links
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case links := <-result:
-		return links, nil
-	case err := <-errResult:
-		return nil, err
-	}
-}
-
-const MaxGoroutines = 9999
-
-func BreadthFirstSearch(start, end string) *Node {
-	root := NewNode(start)
-	queue := []*Node{root}
+func BreadthFirstSearch(start, end string) *tree.Node {
+	root := tree.NewNode(start)
+	queue := []*tree.Node{root}
 	visited := make(map[string]bool)
 
 	// Create a context with cancellation
@@ -96,7 +20,7 @@ func BreadthFirstSearch(start, end string) *Node {
 	defer cancel() // make sure all paths cancel the context to avoid context leak
 
 	// Create a channel to collect nodes that have been processed
-	nodeCh := make(chan *Node)
+	nodeCh := make(chan *tree.Node)
 
 	// Create a semaphore to limit the number of goroutines
 	sem := make(chan struct{}, MaxGoroutines)
@@ -119,7 +43,6 @@ func BreadthFirstSearch(start, end string) *Node {
 				return node
 			}
 
-			fmt.Println("Processing ", node.Value)
 			for _, child := range node.Children {
 				if !visited[child.Value] {
 					go processNode(ctx, child, nodeCh, sem)
@@ -135,16 +58,17 @@ func BreadthFirstSearch(start, end string) *Node {
 	}
 }
 
-func processNode(ctx context.Context, node *Node, nodeCh chan<- *Node, sem chan struct{}) {
-	// Check if the context has been cancelled before processing the node
+func processNode(ctx context.Context, node *tree.Node, nodeCh chan<- *tree.Node, sem chan struct{}) {
+	// Acquire a token from the semaphore
+	sem <- struct{}{}
+	defer func() { <-sem }() // Release the token when the function returns
+
+	// Check the context before making an HTTP request
 	if ctx.Err() != nil {
 		return
 	}
 
-	// Acquire a token from the semaphore
-	sem <- struct{}{}
-
-	links, err := ExtractLinksAsync(ctx, "https://en.wikipedia.org"+node.Value)
+	links, err := scraper.ExtractLinksAsync(ctx, "https://en.wikipedia.org"+node.Value)
 
 	// Only print the error if it's not a context cancellation
 	if err != nil && !errors.Is(err, context.Canceled) {
@@ -153,10 +77,10 @@ func processNode(ctx context.Context, node *Node, nodeCh chan<- *Node, sem chan 
 	}
 
 	for _, link := range links {
-		child := NewNode(link)
+		child := tree.NewNode(link)
 		node.AddChild(child)
 	}
-	defer func() { <-sem }() // Release the token when the function returns
+
 	// Send the processed node to the channel
 	nodeCh <- node
 }

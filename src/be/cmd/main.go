@@ -11,7 +11,7 @@ func main() {
 	start := time.Now()
 
 	// Call the BreadthFirstSearch function
-	result := bfs.BreadthFirstSearch("/wiki/Indonesia", "/wiki/Jakarta")
+	result := bfs.BreadthFirstSearch("/wiki/Joko_Widodo", "/wiki/Sleman_Regency")
 
 	elapsed := time.Since(start)
 	fmt.Printf("Execution time: %s\n", elapsed)
