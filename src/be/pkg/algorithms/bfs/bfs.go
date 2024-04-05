@@ -2,6 +2,7 @@ package bfs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"io"
@@ -83,46 +84,70 @@ func ExtractLinksAsync(ctx context.Context, url string) ([]string, error) {
 	}
 }
 
+const MaxGoroutines = 9999
+
 func BreadthFirstSearch(start, end string) *Node {
 	root := NewNode(start)
 	queue := []*Node{root}
 	visited := make(map[string]bool)
 
+	// Create a context with cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // make sure all paths cancel the context to avoid context leak
+
 	// Create a channel to collect nodes that have been processed
 	nodeCh := make(chan *Node)
 
+	// Create a semaphore to limit the number of goroutines
+	sem := make(chan struct{}, MaxGoroutines)
+
 	// Start a goroutine for the root node
-	go processNode(root, nodeCh)
+	go processNode(ctx, root, nodeCh, sem)
 
-	for node := range nodeCh {
-		visited[node.Value] = true
+	for {
+		select {
+		case node := <-nodeCh:
+			visited[node.Value] = true
 
-		if node.Value == end {
-			// Trace back the path from the destination to the source
-			path := []string{}
-			for n := node; n != nil; n = n.Parent {
-				path = append([]string{n.Value}, path...)
+			if node.Value == end {
+				// Trace back the path from the destination to the source
+				var path []string
+				for n := node; n != nil; n = n.Parent {
+					path = append([]string{n.Value}, path...)
+				}
+				fmt.Println("Path:", path)
+				return node
 			}
-			fmt.Println("Path:", path)
-			return node
-		}
 
-		for _, child := range node.Children {
-			if !visited[child.Value] {
-				go processNode(child, nodeCh)
-				queue = append(queue, child)
+			fmt.Println("Processing ", node.Value)
+			for _, child := range node.Children {
+				if !visited[child.Value] {
+					go processNode(ctx, child, nodeCh, sem)
+					queue = append(queue, child)
+				}
+			}
+		default:
+			// If there's no node to process, return nil
+			if len(queue) == 0 {
+				return nil
 			}
 		}
 	}
-
-	return nil
 }
 
-func processNode(node *Node, nodeCh chan<- *Node) {
-	fmt.Println("Processing node:", node.Value) // Print the node value
-	links, err := ExtractLinksAsync(context.Background(), "https://en.wikipedia.org"+node.Value)
+func processNode(ctx context.Context, node *Node, nodeCh chan<- *Node, sem chan struct{}) {
+	// Check if the context has been cancelled before processing the node
+	if ctx.Err() != nil {
+		return
+	}
 
-	if err != nil {
+	// Acquire a token from the semaphore
+	sem <- struct{}{}
+
+	links, err := ExtractLinksAsync(ctx, "https://en.wikipedia.org"+node.Value)
+
+	// Only print the error if it's not a context cancellation
+	if err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Println(err)
 		return
 	}
@@ -131,6 +156,7 @@ func processNode(node *Node, nodeCh chan<- *Node) {
 		child := NewNode(link)
 		node.AddChild(child)
 	}
+	defer func() { <-sem }() // Release the token when the function returns
 	// Send the processed node to the channel
 	nodeCh <- node
 }
