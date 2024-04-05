@@ -8,7 +8,7 @@ import (
 	"fmt"
 )
 
-const MaxGoroutines = 50 // Lower the limit of goroutines
+const MaxGoroutines = 25 // Lower the limit of goroutines
 
 func BreadthFirstSearch(start, end string) *tree.Node {
 	root := tree.NewNode(start)
@@ -32,7 +32,7 @@ func BreadthFirstSearch(start, end string) *tree.Node {
 		select {
 		case node := <-nodeCh:
 			visited[node.Value] = true
-
+			fmt.Println("Visited:", node.Value, " , ", node.Value == end)
 			if node.Value == end {
 				// Trace back the path from the destination to the source
 				var path []string
@@ -49,6 +49,8 @@ func BreadthFirstSearch(start, end string) *tree.Node {
 					queue = append(queue, child)
 				}
 			}
+			// Remove processed nodes from the queue
+			queue = queue[1:]
 		default:
 			// If there's no node to process, return nil
 			if len(queue) == 0 {
