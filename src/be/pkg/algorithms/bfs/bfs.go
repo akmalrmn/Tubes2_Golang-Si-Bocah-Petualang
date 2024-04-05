@@ -1,62 +1,136 @@
 package bfs
 
 import (
-	"be/pkg/scraper"
-	"be/pkg/tree"
+	"context"
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
+	"io"
+	"net/http"
+	"strings"
+	_ "sync"
 )
 
-// BreadthFirstSearch melakukan pencarian secara lebar pada tree
-func BreadthFirstSearch(star string, target string) *tree.Node {
-	root := tree.NewNode(star)
+type Node struct {
+	Value    string
+	Children []*Node
+	Parent   *Node
+}
 
-	if root == nil {
-		return nil
+func NewNode(value string) *Node {
+	return &Node{
+		Value:    value,
+		Children: []*Node{},
+		Parent:   nil,
 	}
+}
 
-	// Membuat antrian kosong
-	queue := []*tree.Node{root}
-	var answer *tree.Node
+func (n *Node) AddChild(child *Node) {
+	n.Children = append(n.Children, child)
+}
 
-	for len(queue) > 0 {
-		// Mengambil node pertama dari antrian
-		if queue[0].Value == target {
-			answer = queue[0]
-			break
-		}
-
-		node := queue[0]
-		queue = queue[1:]
-
-		// Menampilkan nilai node
-		// fmt.Println(node.Value)
-
-		links, err := scraper.ExtractLinks("https://en.wikipedia.org" + node.Value)
-
+func ExtractLinks(url string) ([]string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
 		if err != nil {
-			fmt.Printf("Terjadi kesalahan: %v", err)
-			return nil
+			fmt.Println(err)
 		}
+	}(resp.Body)
 
-		for _, link := range links {
-			child := tree.NewNode(link)
-			node.AddChild(child)
-		}
-
-		// Menambahkan semua anak dari node ke antrian
-		queue = append(queue, node.Children...)
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, err
 	}
 
-	var newTreeNode *tree.Node
+	var links []string
+	doc.Find("a").Each(func(i int, s *goquery.Selection) {
+		href, exists := s.Attr("href")
+		if exists {
+			if !strings.HasPrefix(href, "#") && strings.HasPrefix(href, "/wiki/") && !strings.Contains(href, ":") {
+				links = append(links, href)
+			}
+		}
+	})
 
-	//Backtracking to get the root node and create a new tree
-	for answer.Parent != nil {
-		newTreeNode = tree.NewNode(answer.Value)
-		newTreeNode.Parent = tree.NewNode(answer.Parent.Value)
-		newTreeNode.Parent.AddChild(newTreeNode)
-		newTreeNode = newTreeNode.Parent
-		answer = answer.Parent
+	return links, nil
+}
+
+func ExtractLinksAsync(ctx context.Context, url string) ([]string, error) {
+	result := make(chan []string, 1)
+	errResult := make(chan error, 1)
+
+	go func() {
+		defer close(result)
+		defer close(errResult)
+		links, err := ExtractLinks(url)
+		if err != nil {
+			errResult <- err
+			return
+		}
+		result <- links
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case links := <-result:
+		return links, nil
+	case err := <-errResult:
+		return nil, err
+	}
+}
+
+func BreadthFirstSearch(start, end string) *Node {
+	root := NewNode(start)
+	queue := []*Node{root}
+	visited := make(map[string]bool)
+
+	// Create a channel to collect nodes that have been processed
+	nodeCh := make(chan *Node)
+
+	// Start a goroutine for the root node
+	go processNode(root, nodeCh)
+
+	for node := range nodeCh {
+		visited[node.Value] = true
+
+		if node.Value == end {
+			// Trace back the path from the destination to the source
+			path := []string{}
+			for n := node; n != nil; n = n.Parent {
+				path = append([]string{n.Value}, path...)
+			}
+			fmt.Println("Path:", path)
+			return node
+		}
+
+		for _, child := range node.Children {
+			if !visited[child.Value] {
+				go processNode(child, nodeCh)
+				queue = append(queue, child)
+			}
+		}
 	}
 
-	return newTreeNode
+	return nil
+}
+
+func processNode(node *Node, nodeCh chan<- *Node) {
+	fmt.Println("Processing node:", node.Value) // Print the node value
+	links, err := ExtractLinksAsync(context.Background(), "https://en.wikipedia.org"+node.Value)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	for _, link := range links {
+		child := NewNode(link)
+		node.AddChild(child)
+	}
+	// Send the processed node to the channel
+	nodeCh <- node
 }
