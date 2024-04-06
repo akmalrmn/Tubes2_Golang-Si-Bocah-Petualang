@@ -8,7 +8,9 @@ import (
 	"fmt"
 )
 
-const MaxGoroutines = 25 // Lower the limit of goroutines
+const MaxGoroutines = 12
+
+var HowManyArticelChecked = 0
 
 func BreadthFirstSearch(start, end string) *tree.Node {
 	root := tree.NewNode(start)
@@ -28,12 +30,12 @@ func BreadthFirstSearch(start, end string) *tree.Node {
 	// Start a goroutine for the root node
 	go processNode(ctx, root, nodeCh, sem)
 
-	for {
-		select {
-		case node := <-nodeCh:
+	for { // Loop until the queue is empty
+		select { // Select the first available case
+		case node := <-nodeCh: // If a node is processed
 			visited[node.Value] = true
 			fmt.Println("Visited:", node.Value, " , ", node.Value == end)
-			if node.Value == end {
+			if node.Value == end { // If the destination is found
 				// Trace back the path from the destination to the source
 				var path []string
 				for n := node; n != nil; n = n.Parent {
@@ -43,9 +45,9 @@ func BreadthFirstSearch(start, end string) *tree.Node {
 				return node
 			}
 
-			for _, child := range node.Children {
-				if !visited[child.Value] {
-					go processNode(ctx, child, nodeCh, sem)
+			for _, child := range node.Children { // Add unvisited children to the queue
+				if !visited[child.Value] { // If the child is not visited
+					go processNode(ctx, child, nodeCh, sem) // Start a goroutine for the child
 					queue = append(queue, child)
 				}
 			}
@@ -70,6 +72,7 @@ func processNode(ctx context.Context, node *tree.Node, nodeCh chan<- *tree.Node,
 		return
 	}
 
+	HowManyArticelChecked++
 	links, err := scraper.ExtractLinksAsync(ctx, "https://en.wikipedia.org"+node.Value)
 
 	// Only print the error if it's not a context cancellation
