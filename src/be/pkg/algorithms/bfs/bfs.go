@@ -89,3 +89,66 @@ func processNode(ctx context.Context, node *tree.Node, nodeCh chan<- *tree.Node,
 	// Send the processed node to the channel
 	nodeCh <- node
 }
+
+func BidirectionalBreadthFirstSearch(start, end string) *tree.Node {
+	rootStart := tree.NewNode(start)
+	rootEnd := tree.NewNode(end)
+	queueStart := []*tree.Node{rootStart}
+	queueEnd := []*tree.Node{rootEnd}
+	visitedStart := make(map[string]*tree.Node)
+	visitedEnd := make(map[string]*tree.Node)
+
+	// Create channels to collect nodes that have been processed
+	nodeChStart := make(chan *tree.Node)
+	nodeChEnd := make(chan *tree.Node)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Create a semaphore to limit the number of goroutines
+	sem := make(chan struct{}, MaxGoroutines)
+
+	// Start goroutines for the root nodes
+	go processNode(ctx, rootStart, nodeChStart, sem)
+	go processNode(ctx, rootEnd, nodeChEnd, sem)
+
+	for {
+		select {
+		case nodeStart := <-nodeChStart:
+			visitedStart[nodeStart.Value] = nodeStart
+			if nodeEnd, ok := visitedEnd[nodeStart.Value]; ok {
+				printPath(nodeStart, nodeEnd)
+				return nodeStart // or some function to reconstruct the path
+			}
+			for _, child := range nodeStart.Children {
+				if _, ok := visitedStart[child.Value]; !ok {
+					go processNode(ctx, child, nodeChStart, sem)
+					queueStart = append(queueStart, child)
+				}
+			}
+
+		case nodeEnd := <-nodeChEnd:
+			visitedEnd[nodeEnd.Value] = nodeEnd
+			if nodeStart, ok := visitedStart[nodeEnd.Value]; ok {
+				printPath(nodeStart, nodeEnd)
+				return nodeEnd // or some function to reconstruct the path
+			}
+			for _, child := range nodeEnd.Children {
+				if _, ok := visitedEnd[child.Value]; !ok {
+					go processNode(ctx, child, nodeChEnd, sem)
+					queueEnd = append(queueEnd, child)
+				}
+			}
+		}
+	}
+}
+
+func printPath(start, end *tree.Node) {
+	var path []string
+	for n := start; n != nil; n = n.Parent {
+		path = append([]string{n.Value}, path...)
+	}
+	for n := end.Parent; n != nil; n = n.Parent {
+		path = append(path, n.Value)
+	}
+	fmt.Println("Path:", path)
+}

@@ -23,7 +23,7 @@ func main() {
 	start := time.Now()
 
 	// Call the BreadthFirstSearch function
-	result := bfs.BreadthFirstSearch("/wiki/Joko_Widodo", "/wiki/Sleman_Regency")
+	result := bfs.BidirectionalBreadthFirstSearch("/wiki/Joko_Widodo", "/wiki/Sleman_Regency")
 
 	if result != nil {
 		fmt.Println("Path found!")
