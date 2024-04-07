@@ -10,9 +10,12 @@ import (
 
 const MaxGoroutines = 12
 
-var HowManyArticelChecked = 0
+var HowManyArticleChecked = 0
 
 func BreadthFirstSearch(start, end string) *tree.Node {
+	// Reset the counter
+	HowManyArticleChecked = 0
+
 	root := tree.NewNode(start)
 	queue := []*tree.Node{root}
 	visited := make(map[string]bool)
@@ -72,7 +75,7 @@ func processNode(ctx context.Context, node *tree.Node, nodeCh chan<- *tree.Node,
 		return
 	}
 
-	HowManyArticelChecked++
+	HowManyArticleChecked++
 	links, err := scraper.ExtractLinksAsync(ctx, "https://en.wikipedia.org"+node.Value)
 
 	// Only print the error if it's not a context cancellation
@@ -90,7 +93,10 @@ func processNode(ctx context.Context, node *tree.Node, nodeCh chan<- *tree.Node,
 	nodeCh <- node
 }
 
-func BidirectionalBreadthFirstSearch(start, end string) *tree.Node {
+func BidirectionalBreadthFirstSearch(start, end string) []string {
+	// Reset the counter
+	HowManyArticleChecked = 0
+
 	rootStart := tree.NewNode(start)
 	rootEnd := tree.NewNode(end)
 	queueStart := []*tree.Node{rootStart}
@@ -117,7 +123,7 @@ func BidirectionalBreadthFirstSearch(start, end string) *tree.Node {
 			visitedStart[nodeStart.Value] = nodeStart
 			if nodeEnd, ok := visitedEnd[nodeStart.Value]; ok {
 				printPath(nodeStart, nodeEnd)
-				return nodeStart // or some function to reconstruct the path
+				return returnPath(nodeStart, nodeEnd)
 			}
 			for _, child := range nodeStart.Children {
 				if _, ok := visitedStart[child.Value]; !ok {
@@ -130,7 +136,7 @@ func BidirectionalBreadthFirstSearch(start, end string) *tree.Node {
 			visitedEnd[nodeEnd.Value] = nodeEnd
 			if nodeStart, ok := visitedStart[nodeEnd.Value]; ok {
 				printPath(nodeStart, nodeEnd)
-				return nodeEnd // or some function to reconstruct the path
+				return returnPath(nodeStart, nodeEnd)
 			}
 			for _, child := range nodeEnd.Children {
 				if _, ok := visitedEnd[child.Value]; !ok {
@@ -151,4 +157,15 @@ func printPath(start, end *tree.Node) {
 		path = append(path, n.Value)
 	}
 	fmt.Println("Path:", path)
+}
+
+func returnPath(start, end *tree.Node) []string {
+	var path []string
+	for n := start; n != nil; n = n.Parent {
+		path = append([]string{n.Value}, path...)
+	}
+	for n := end.Parent; n != nil; n = n.Parent {
+		path = append(path, n.Value)
+	}
+	return path
 }
