@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 )
+
 var httpClient *http.Client
 var linkCache, _ = lru.New(1000) // Cache for the links
-func init() {
+func Init() {
 	httpClient = createCustomHTTPClient()
 }
 
@@ -89,12 +90,12 @@ func ExtractLinksAsync(ctx context.Context, url string) ([]string, error) {
 	}()
 
 	select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case links := <-result:
-			return links, nil
-		case err := <-errResult:
-			return nil, err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case links := <-result:
+		return links, nil
+	case err := <-errResult:
+		return nil, err
 	}
 }
 

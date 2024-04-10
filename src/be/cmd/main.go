@@ -2,6 +2,7 @@ package main
 
 import (
 	"be/pkg/algorithms/bfs"
+	"be/pkg/scraper"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
@@ -67,8 +68,10 @@ func main() {
 		}
 	}()
 
+	scraper.Init()
+
 	start := time.Now()
-	path := bfs.BidirectionalBreadthFirstSearchOri("/wiki/Jokowi_Dodo", "/wiki/Sleman_Regency")
+	path := bfs.BidirectionalBreadthFirstSearch("/wiki/Jokowi_Dodo", "/wiki/Sleman_Regency")
 	end := time.Since(start)
 
 	fmt.Println("Path:", path)
