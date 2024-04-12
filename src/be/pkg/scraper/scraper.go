@@ -18,7 +18,7 @@ func Init() {
 
 func createCustomHTTPClient() *http.Client {
 	transport := &http.Transport{
-		MaxIdleConns:       100,
+		MaxIdleConns:       10,
 		IdleConnTimeout:    30 * time.Second,
 		DisableCompression: true,
 		DialContext: (&net.Dialer{

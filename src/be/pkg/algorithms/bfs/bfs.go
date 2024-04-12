@@ -9,9 +9,15 @@ import (
 	"github.com/korovkin/limiter"
 	"sync"
 	"time"
+	"unsafe"
 )
 
-const MaxGoroutines = 10
+type JobInfo struct {
+	Links string
+	Err   error
+}
+
+const MaxGoroutines = 100
 
 var (
 	HowManyArticleChecked = 0
@@ -27,12 +33,13 @@ func BidirectionalBreadthFirstSearch(start, end string) []string {
 	rootStart, rootEnd := tree.NewNode(start), tree.NewNode(end)
 	queueStart, queueEnd := []*tree.Node{rootStart}, []*tree.Node{rootEnd}
 	visitedStart, visitedEnd := make(map[string]*tree.Node), make(map[string]*tree.Node)
-	nodeChStart, nodeChEnd := make(chan *tree.Node,9999), make(chan *tree.Node,9999)
+	nodeChStart, nodeChEnd := make(chan *tree.Node, 9999), make(chan *tree.Node, 9999)
 
 	go processNode(rootStart, nodeChStart, limit)
 	go processNode(rootEnd, nodeChEnd, limit)
 
 	for {
+		fmt.Println("Size Of Ch : ", unsafe.Sizeof(nodeChStart), unsafe.Sizeof(nodeChEnd))
 		mutex.Lock()
 		if HowManyArticleChecked%10 == 0 {
 			fmt.Println("ArticleChecked ", HowManyArticleChecked, " Time ", time.Since(startTime))
@@ -41,7 +48,6 @@ func BidirectionalBreadthFirstSearch(start, end string) []string {
 		mutex.Unlock()
 		select {
 		case nodeStart := <-nodeChStart:
-			fmt.Println("Starting to receive node from channel:", nodeStart.Value)
 			visitedStart[nodeStart.Value] = nodeStart
 			if nodeEnd, ok := visitedEnd[nodeStart.Value]; ok {
 				path := returnPath(nodeStart, nodeEnd)
@@ -50,11 +56,9 @@ func BidirectionalBreadthFirstSearch(start, end string) []string {
 					return path
 				}
 			}
-			fmt.Println("Finished receiving node from channel:", nodeStart.Value)
 			processChildren(nodeStart, visitedStart, nodeChStart, limit, queueStart)
 
 		case nodeEnd := <-nodeChEnd:
-			fmt.Println("Starting to receive node from channel:", nodeEnd.Value)
 			visitedEnd[nodeEnd.Value] = nodeEnd
 			if nodeStart, ok := visitedStart[nodeEnd.Value]; ok {
 				path := returnPath(nodeStart, nodeEnd)
@@ -63,7 +67,6 @@ func BidirectionalBreadthFirstSearch(start, end string) []string {
 					return path
 				}
 			}
-			fmt.Println("Finished receiving node from channel:", nodeEnd.Value)
 			processChildren(nodeEnd, visitedEnd, nodeChEnd, limit, queueEnd)
 		}
 	}
@@ -71,26 +74,19 @@ func BidirectionalBreadthFirstSearch(start, end string) []string {
 
 func processNode(node *tree.Node, nodeCh chan<- *tree.Node, limit *limiter.ConcurrencyLimiter) {
 	_, err := limit.Execute(func() {
-		fmt.Println("Starting to process node:", node.Value)
 		mutex.Lock()
 		HowManyArticleChecked++
 		mutex.Unlock()
-		fmt.Println("Starting to extract links for node:", node.Value)
 		links, err := scraper.ExtractLinks("https://en.wikipedia.org" + node.Value)
-		fmt.Println("Finished extracting links for node:", node.Value)
 		if err != nil && !errors.Is(err, context.Canceled) {
-			fmt.Println("Error processing node:", err)
 			return
 		}
 		for _, link := range links {
 			node.AddChild(tree.NewNode(link))
 		}
-		fmt.Println("Starting to send node to channel:", node.Value)
 		nodeCh <- node
-		fmt.Println("Finished sending node to channel:", node.Value)
 	})
 	if err != nil {
-		fmt.Println("Error executing limit:", err)
 		return
 	}
 }
@@ -98,12 +94,8 @@ func processNode(node *tree.Node, nodeCh chan<- *tree.Node, limit *limiter.Concu
 func processChildren(node *tree.Node, visited map[string]*tree.Node, nodeCh chan<- *tree.Node, limit *limiter.ConcurrencyLimiter, queue []*tree.Node) {
 	for _, child := range node.Children {
 		if _, ok := visited[child.Value]; !ok {
-			fmt.Println("Starting to process child:", child.Value)
 			processNode(child, nodeCh, limit)
 			queue = append(queue, child)
-			fmt.Println("Finished processing child:", child.Value)
-		} else {
-			fmt.Println("Child already visited:", child.Value)
 		}
 	}
 }
