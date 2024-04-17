@@ -1,6 +1,8 @@
 package scraper
 
 import (
+	"fmt"
+	"github.com/PuerkitoBio/goquery"
 	"github.com/hashicorp/golang-lru"
 	"golang.org/x/net/context"
 	"golang.org/x/net/html"
@@ -31,6 +33,9 @@ func createCustomHTTPClient() *http.Client {
 		Transport: transport,
 	}
 }
+
+
+var LinkCache, _ = lru.New(1000)
 
 // ExtractLinks mengambil semua link dari halaman web Wikipedia
 func ExtractLinks(url string) ([]string, error) {

@@ -9,6 +9,8 @@ require (
 	github.com/korovkin/limiter v0.0.0-20230307205149-3d4b2b34c99d
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/shirou/gopsutil v3.21.11+incompatible
+	github.com/PuerkitoBio/goquery v1.9.1
+	github.com/hashicorp/golang-lru v1.0.2
 )
 
 require (

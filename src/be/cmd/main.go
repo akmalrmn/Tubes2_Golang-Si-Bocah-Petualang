@@ -69,14 +69,20 @@ func main() {
 		}
 	}()
 
-	scraper.Init() // Initialize scraper http
-	start := time.Now() // Start timer
-	path := bfs.BidirectionalBreadthFirstSearch("/wiki/Jokowi_Dodo", "/wiki/Sleman_Regency")
-	end := time.Since(start) // End timer
+	// Start the timer
+	start := time.Now()
+
+	// Call the BreadthFirstSearch function
+	result := bfs.BiDirectionalBFS("/wiki/Joko_Widodo", "/wiki/Sleman_Regency")
 
 	fmt.Println("Path:", path)
 	fmt.Println("Time:", end)
 
-	log.Fatal(http.ListenAndServe(":8000", handler))
+	fmt.Println("Total article checked: ", bfs.HowManyArticelChecked)
+
+	elapsed := time.Since(start)
+	fmt.Printf("Execution time: %d minute %d seconds %d miliseconds \n", int(elapsed.Minutes()), int(elapsed.Seconds())%60, (elapsed.Milliseconds())%1000)
+	// Print the result
+
 	return
 }
