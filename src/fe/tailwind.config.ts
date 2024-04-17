@@ -21,6 +21,20 @@ const config: Config = {
       fontFamily: {
         schoolbell: ["var(--font-schoolbell)", "cursive"],
       },
+      animation: {
+        fade: "fadeIn 2s ease-in-out",
+        sliding: "slide 1s linear infinite",
+      },
+      keyframes: {
+        fadeIn: {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        slide: {
+          from: { backgroundPosition: "0 0" },
+          to: { backgroundPosition: "100% 0" },
+        },
+      },
     },
   },
   plugins: [addVariablesForColors],

@@ -1,11 +1,7 @@
-import { ParticleBackground } from "@/components/particle-background";
-import Image from "next/image";
-import hero from "@/assets/images/hero.png";
-
 export default function Home() {
   return (
     <main className='flex min-h-screen flex-col items-center justify-between p-24'>
-      <div className='h-full flex flex-col items-center -space-y-10'>
+      <div className='h-full flex flex-col items-center -space-y-10 z-10'>
         <div className='py-1 px-12 w-fit relative'>
           <div className='absolute -inset-1 bg-white blur-lg z-[-1] rounded-full'></div>
           <h1 className='font-schoolbell text-[100px] bg-white'>GoLang</h1>
@@ -30,7 +26,6 @@ export default function Home() {
           </h1>
         </div>
       </div>
-      <ParticleBackground />
     </main>
   );
 }
