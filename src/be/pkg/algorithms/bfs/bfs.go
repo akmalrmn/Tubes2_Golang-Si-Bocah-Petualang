@@ -27,61 +27,6 @@ var (
 
 ///  * ============== Function =============== * ///
 
-func BFS(start, end string) []string {
-	go trackGoroutines() // ! Profiler ! //
-
-	// Initialize visited map and start node
-	visited := make(map[string]bool)
-	visited[start] = true
-
-	// Make channel for tasks
-	tasks := make(chan *tree.Node, 1000)
-
-	// Create worker pool
-	for i := 0; i < maxGoRoutines; i++ {
-		go worker(tasks)
-	}
-
-	// Process the start node
-	startNode := tree.NewNode(start)
-	tasks <- startNode
-
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				if !finished && maxGoRoutines < increaseLimit {
-					maxGoRoutines += 10 // Increase the limit by 10
-					for i := 0; i < 10; i++ {
-						go worker(tasks)
-					}
-				}
-			}
-		}
-	}()
-
-	for {
-		select {
-		case val := <-chanOut:
-			if val.Value == end {
-				return getPath(val)
-			}
-			if _, ok := visited[val.Value]; !ok {
-				visited[val.Value] = true
-				tasks <- val
-			}
-		case task := <-tasks:
-			if _, ok := visited[task.Value]; !ok {
-				visited[task.Value] = true
-				go ProcessNode(task)
-			}
-		}
-	}
-}
-
 // BiDirectionalBFS
 //   - BiDirectionalBFS is a function that finds the shortest path between two nodes using the Bi-Directional Breadth First Search algorithm.
 //   - It takes two parameters, start and end, which are the start and end nodes respectively.
@@ -229,15 +174,6 @@ func returnPathBiBFS(midStart, midEnd *tree.Node) []string {
 	return path
 }
 
-func getPath(end *tree.Node) []string {
-	var path []string
-	for end != nil {
-		path = append(path, end.Value)
-		end = end.Parent
-	}
-	return reverse(path)
-}
-
 func reverse(path []string) []string {
 	for i := 0; i < len(path)/2; i++ {
 		j := len(path) - i - 1
@@ -263,21 +199,6 @@ func ProcessNodeBi(node *tree.Node, output chan *tree.Node) {
 	}
 }
 
-func ProcessNode(node *tree.Node) {
-	links, err := scraper.ExtractLinksAsync("https://en.wikipedia.org" + node.Value)
-
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	for _, link := range links {
-		child := tree.NewNode(link)
-		node.AddChild(child)
-		chanOut <- child
-	}
-}
-
 /// * ============== Worker =============== * ///
 
 func workerBi(tasks <-chan *tree.Node, code int) {
@@ -287,12 +208,6 @@ func workerBi(tasks <-chan *tree.Node, code int) {
 		} else {
 			ProcessNodeBi(node, chanOutBackward)
 		}
-	}
-}
-
-func worker(tasks <-chan *tree.Node) {
-	for node := range tasks {
-		ProcessNode(node)
 	}
 }
 
