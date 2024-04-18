@@ -5,21 +5,24 @@ import (
 	"be/pkg/tree"
 	"fmt"
 	"runtime"
+	"sync"
 	"time"
 )
 
 ///  * ============== Var =============== * ///
 
 var (
-	maxGoRoutines          = 10
-	NumOfArticlesProcessed = 0
-	chanOut                = make(chan *tree.Node, 1000)
+	maxGoRoutines = 10
+	chanOut       = make(chan *tree.Node, 1000)
 
 	chanOutForward  = make(chan *tree.Node, 1000)
 	chanOutBackward = make(chan *tree.Node, 1000)
 
+	visitedForward  sync.Map
+	visitedBackward sync.Map
+
 	finished      = false
-	increaseLimit = 300
+	increaseLimit = 600
 )
 
 ///  * ============== Function =============== * ///
@@ -90,10 +93,6 @@ func BiDirectionalBFS(start, end string) []string {
 	// Delete Links Cache
 	scraper.LinkCache.Purge()
 
-	// Initialize visited maps and task queues
-	visitedForward := make(map[string]*tree.Node)
-	visitedBackward := make(map[string]*tree.Node)
-
 	// Create start and end nodes
 	startNode := tree.NewNode(start)
 	endNode := tree.NewNode(end)
@@ -112,8 +111,8 @@ func BiDirectionalBFS(start, end string) []string {
 	tasksBackward <- endNode
 
 	// Visited start and end nodes
-	visitedForward[start] = startNode
-	visitedBackward[end] = endNode
+	visitedForward.Store(start, startNode)
+	visitedBackward.Store(end, endNode)
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
@@ -137,40 +136,40 @@ func BiDirectionalBFS(start, end string) []string {
 		select {
 		case val := <-chanOutForward:
 			// Only access visitedBackward here
-			if _, ok := visitedBackward[val.Value]; ok {
-				path := returnPathBiBFS(val, visitedBackward[val.Value])
+			if node, ok := visitedBackward.Load(val.Value); ok {
+				path := returnPathBiBFS(val, node.(*tree.Node))
 				if checkPathValidity(path) {
 					return path
 				}
 			}
 			// Only access visitedForward here
-			if _, ok := visitedForward[val.Value]; !ok {
-				visitedForward[val.Value] = val
+			if _, ok := visitedForward.Load(val.Value); !ok {
+				visitedForward.Store(val.Value, val)
 				tasksForward <- val
 			}
 		case tasks := <-tasksForward:
 			// Only access visitedForward here
-			if _, ok := visitedForward[tasks.Value]; !ok {
-				visitedForward[tasks.Value] = tasks
+			if _, ok := visitedForward.Load(tasks.Value); !ok {
+				visitedForward.Store(tasks.Value, tasks)
 				go ProcessNodeBi(tasks, chanOutForward)
 			}
 		case val := <-chanOutBackward:
 			// Only access visitedForward here
-			if _, ok := visitedForward[val.Value]; ok {
-				path := returnPathBiBFS(visitedForward[val.Value], val)
+			if node, ok := visitedForward.Load(val.Value); ok {
+				path := returnPathBiBFS(node.(*tree.Node), val)
 				if checkPathValidity(path) {
 					return path
 				}
 			}
 			// Only access visitedBackward here
-			if _, ok := visitedBackward[val.Value]; !ok {
-				visitedBackward[val.Value] = val
+			if _, ok := visitedBackward.Load(val.Value); !ok {
+				visitedBackward.Store(val.Value, val)
 				tasksBackward <- val
 			}
 		case tasks := <-tasksBackward:
 			// Only access visitedBackward here
-			if _, ok := visitedBackward[tasks.Value]; !ok {
-				visitedBackward[tasks.Value] = tasks
+			if _, ok := visitedBackward.Load(tasks.Value); !ok {
+				visitedBackward.Store(tasks.Value, tasks)
 				go ProcessNodeBi(tasks, chanOutBackward)
 			}
 		}
@@ -180,16 +179,32 @@ func BiDirectionalBFS(start, end string) []string {
 ///  * ============== Helper =============== * ///
 
 func checkPathValidity(path []string) bool {
+	results := make([]<-chan bool, len(path)-1)
+
 	for i := 0; i < len(path)-1; i++ {
-		if !linkContain(path[i], path[i+1]) {
+		results[i] = checkLinkContainAsync(path[i], path[i+1])
+	}
+
+	for _, result := range results {
+		if !<-result {
 			return false
 		}
 	}
+
 	return true
 }
 
+func checkLinkContainAsync(start, end string) <-chan bool {
+	result := make(chan bool)
+	go func() {
+		defer close(result)
+		result <- linkContain(start, end)
+	}()
+	return result
+}
+
 func linkContain(start, end string) bool {
-	links, _ := scraper.ExtractLinks("https://en.wikipedia.org" + start)
+	links, _ := scraper.ExtractLinksNonAdd("https://en.wikipedia.org" + start)
 
 	for _, link := range links {
 		if link == end {
@@ -211,7 +226,6 @@ func returnPathBiBFS(midStart, midEnd *tree.Node) []string {
 		path = append(path, midEnd.Value)
 		midEnd = midEnd.Parent
 	}
-	fmt.Println("Path returned : ", path)
 	return path
 }
 
@@ -235,8 +249,7 @@ func reverse(path []string) []string {
 ///  * ============== Process Node =============== * ///
 
 func ProcessNodeBi(node *tree.Node, output chan *tree.Node) {
-	NumOfArticlesProcessed++
-	links, err := scraper.ExtractLinks("https://en.wikipedia.org" + node.Value)
+	links, err := scraper.ExtractLinksAsync("https://en.wikipedia.org" + node.Value)
 
 	if err != nil {
 		fmt.Println(err)
@@ -251,9 +264,7 @@ func ProcessNodeBi(node *tree.Node, output chan *tree.Node) {
 }
 
 func ProcessNode(node *tree.Node) {
-
-	NumOfArticlesProcessed++
-	links, err := scraper.ExtractLinks("https://en.wikipedia.org" + node.Value)
+	links, err := scraper.ExtractLinksAsync("https://en.wikipedia.org" + node.Value)
 
 	if err != nil {
 		fmt.Println(err)
@@ -290,8 +301,8 @@ func trackGoroutines() {
 	for {
 		time.Sleep(time.Second * 5) // update every 2 seconds
 		fmt.Println(" ======================== ")
-		fmt.Println("Article per sec : ", NumOfArticlesProcessed/int(time.Since(start).Seconds()))
-		fmt.Println("Number of articles processed: ", NumOfArticlesProcessed)
+		fmt.Println("Article per sec : ", scraper.NumOfArticlesProcessed/int(time.Since(start).Seconds()))
+		fmt.Println("Number of articles processed: ", scraper.NumOfArticlesProcessed)
 		fmt.Printf("Number of goroutines: %d\n", runtime.NumGoroutine())
 		fmt.Println("Max number of goroutines: ", maxGoRoutines)
 	}

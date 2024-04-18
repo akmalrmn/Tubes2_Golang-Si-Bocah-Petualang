@@ -42,7 +42,7 @@ func main() {
 			resp = []byte(`{"status": "ok"}`)
 		} else if req.URL.Path == "/bfs" {
 			// Call the BreadthFirstSearch function
-			result := bfs.BidirectionalBreadthFirstSearch(start, end)
+			result := bfs.BiDirectionalBFS(start, end)
 			resp = []byte(fmt.Sprintf(`{"result": "%v"}`, result))
 		} else if req.URL.Path == "/dfs" {
 			// Call the DepthFirstSearch function
@@ -70,17 +70,15 @@ func main() {
 	}()
 
 	// Start the timer
-	start := time.Now()
+	scraper.Init()
 
 	// Call the BreadthFirstSearch function
-	result := bfs.BiDirectionalBFS("/wiki/Joko_Widodo", "/wiki/Sleman_Regency")
-
-	fmt.Println("Path:", path)
-	fmt.Println("Time:", end)
-
-	fmt.Println("Total article checked: ", bfs.HowManyArticelChecked)
-
+	start := time.Now()
+	result := bfs.BiDirectionalBFS("/wiki/Joko_Widodo", "/wiki/Receivership")
 	elapsed := time.Since(start)
+
+	fmt.Println("Result: ", result)
+	fmt.Println("Total article checked: ", scraper.NumOfArticlesProcessed)
 	fmt.Printf("Execution time: %d minute %d seconds %d miliseconds \n", int(elapsed.Minutes()), int(elapsed.Seconds())%60, (elapsed.Milliseconds())%1000)
 	// Print the result
 

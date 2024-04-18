@@ -2,9 +2,7 @@ package scraper
 
 import (
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
 	"github.com/hashicorp/golang-lru"
-	"golang.org/x/net/context"
 	"golang.org/x/net/html"
 	"net"
 	"net/http"
@@ -17,6 +15,8 @@ var linkCache, _ = lru.New(1000) // Cache for the links
 func Init() {
 	httpClient = createCustomHTTPClient()
 }
+
+var NumOfArticlesProcessed int
 
 func createCustomHTTPClient() *http.Client {
 	transport := &http.Transport{
@@ -34,12 +34,18 @@ func createCustomHTTPClient() *http.Client {
 	}
 }
 
-
 var LinkCache, _ = lru.New(1000)
 
 // ExtractLinks mengambil semua link dari halaman web Wikipedia
 func ExtractLinks(url string) ([]string, error) {
-	resp, err := httpClient.Get(url)
+
+	NumOfArticlesProcessed++ // Add the number of articles processed
+
+	if links, ok := linkCache.Get(url); ok {
+		return links.([]string), nil
+	} // Check the cache before making an HTTP request
+
+	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +57,42 @@ func ExtractLinks(url string) ([]string, error) {
 		tt := z.Next()
 		switch tt {
 		case html.ErrorToken:
-			// End of the document, we're done
+			linkCache.Add(url, links)
+			return links, nil
+		case html.StartTagToken, html.SelfClosingTagToken:
+			t := z.Token()
+			if t.Data == "a" {
+				for _, a := range t.Attr {
+					if a.Key == "href" {
+						trimmed := strings.Trim(a.Val, "\n")
+						if !strings.HasPrefix(trimmed, "#") && strings.HasPrefix(trimmed, "/wiki/") && !strings.Contains(trimmed, ":") && !strings.Contains(trimmed, "Main_Page") && !strings.Contains(trimmed, "#") {
+							links = append(links, trimmed)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func ExtractLinksNonAdd(url string) ([]string, error) {
+	if links, ok := linkCache.Get(url); ok {
+		return links.([]string), nil
+	}
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var links []string
+	z := html.NewTokenizer(resp.Body)
+	for {
+		tt := z.Next()
+		switch tt {
+		case html.ErrorToken:
+			linkCache.Add(url, links)
 			return links, nil
 		case html.StartTagToken, html.SelfClosingTagToken:
 			t := z.Token()
@@ -71,7 +112,8 @@ func ExtractLinks(url string) ([]string, error) {
 
 // Fungsi rekursif untuk mengekstrak link dari node HTML
 
-func ExtractLinksAsync(ctx context.Context, url string) ([]string, error) {
+func ExtractLinksAsync(url string) ([]string, error) {
+
 	// Check the cache before making an HTTP request
 	if links, ok := linkCache.Get(url); ok {
 		return links.([]string), nil
@@ -95,8 +137,6 @@ func ExtractLinksAsync(ctx context.Context, url string) ([]string, error) {
 	}()
 
 	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
 	case links := <-result:
 		return links, nil
 	case err := <-errResult:
