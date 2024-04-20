@@ -3,6 +3,7 @@ package scraper
 import (
 	"fmt"
 	"github.com/hashicorp/golang-lru"
+	"github.com/temoto/robotstxt"
 	"golang.org/x/net/html"
 	"net"
 	"net/http"
@@ -10,17 +11,39 @@ import (
 	"time"
 )
 
-var httpClient *http.Client
-var linkCache, _ = lru.New(1000) // Cache for the links
+var (
+	httpClient   *http.Client
+	linkCache, _ = lru.New(1000)
+	ua           *robotstxt.Group
+)
+
 func Init() {
 	httpClient = createCustomHTTPClient()
+	resp, err := httpClient.Get("https://en.wikipedia.org/robots.txt")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer resp.Body.Close()
+
+	data, err := robotstxt.FromResponse(resp)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	ua = data.FindGroup("*")
+	if ua == nil {
+		fmt.Println("No group found for user agent")
+		return
+	}
 }
 
 var NumOfArticlesProcessed int
 
 func createCustomHTTPClient() *http.Client {
 	transport := &http.Transport{
-		MaxIdleConns:       10,
+		MaxIdleConns:       300,
 		IdleConnTimeout:    30 * time.Second,
 		DisableCompression: true,
 		DialContext: (&net.Dialer{
@@ -41,11 +64,14 @@ func ExtractLinks(url string) ([]string, error) {
 
 	NumOfArticlesProcessed++ // Add the number of articles processed
 
+	if !ua.Test(url) {
+		return nil, fmt.Errorf("URL is not allowed by robots.txt")
+	}
 	if links, ok := linkCache.Get(url); ok {
 		return links.([]string), nil
 	} // Check the cache before making an HTTP request
 
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}

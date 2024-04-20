@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
-	"runtime"
 	"time"
 )
 
@@ -58,7 +57,6 @@ func main() {
 		rw.Write(resp)
 	})
 	log.Println("Server is available at http://localhost:8000")
-	runtime.GOMAXPROCS(16)
 	handler = allowCORS(handler)
 
 	// ! Profiler
