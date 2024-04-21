@@ -19,7 +19,8 @@ var (
 
 func Init() {
 	httpClient = createCustomHTTPClient()
-	resp, err := httpClient.Get("https://en.wikipedia.org/robots.txt")
+
+	resp, err := http.Get("https://en.wikipedia.org/robots.txt")
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -43,12 +44,12 @@ var NumOfArticlesProcessed int
 
 func createCustomHTTPClient() *http.Client {
 	transport := &http.Transport{
-		MaxIdleConns:       300,
-		IdleConnTimeout:    30 * time.Second,
-		DisableCompression: true,
+		MaxIdleConns:       400,
+		IdleConnTimeout:    10 * time.Second,
+		DisableCompression: false,
 		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
+			Timeout:   10 * time.Second,
+			KeepAlive: 10 * time.Second,
 		}).DialContext,
 	}
 

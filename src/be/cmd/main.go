@@ -72,7 +72,7 @@ func main() {
 
 	// Call the BreadthFirstSearch function
 	start := time.Now()
-	result := bfs.BiDirectionalBFS("/wiki/Joko_Widodo", "/wiki/Receivership")
+	result := bfs.SearchWithTimeout("/wiki/Joko_Widodo", "/wiki/Prabowo_Subianto", 10)
 	elapsed := time.Since(start)
 
 	fmt.Println("Result: ", result)
