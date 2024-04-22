@@ -1,6 +1,7 @@
 package bfs
 
 import (
+	priorityqueue "be/pkg/PriorityQueue"
 	"be/pkg/scraper"
 	"be/pkg/tree"
 	"fmt"
@@ -42,8 +43,8 @@ func BiDirectionalBFS(start, end string) []string {
 	startNode := tree.NewNode(start)
 	endNode := tree.NewNode(end)
 
-	tasksForward := make(chan *tree.Node, 1000)
-	tasksBackward := make(chan *tree.Node, 1000)
+	tasksForward := priorityqueue.NewPriorityChannel()
+	tasksBackward := priorityqueue.NewPriorityChannel()
 
 	// Create worker pool
 	for i := 0; i < maxGoRoutines/2; i++ {
@@ -52,8 +53,8 @@ func BiDirectionalBFS(start, end string) []string {
 	}
 
 	// Process the start and end nodes
-	tasksForward <- startNode
-	tasksBackward <- endNode
+	tasksForward.Add(startNode)
+	tasksBackward.Add(endNode)
 
 	// Visited start and end nodes
 	visitedForward.Store(start, startNode)
@@ -90,13 +91,13 @@ func BiDirectionalBFS(start, end string) []string {
 			// Only access visitedForward here
 			if _, ok := visitedForward.Load(val.Value); !ok {
 				visitedForward.Store(val.Value, val)
-				tasksForward <- val
+				tasksForward.Add(val)
 			}
-		case tasks := <-tasksForward:
+		case tasks := <-tasksForward.C():
 			// Only access visitedForward here
-			if _, ok := visitedForward.Load(tasks.Value); !ok {
-				visitedForward.Store(tasks.Value, tasks)
-				go ProcessNodeBi(tasks, chanOutForward)
+			if _, ok := visitedForward.Load(tasks.Value.Value); !ok {
+				visitedForward.Store(tasks.Value.Value, tasks)
+				go ProcessNodeBi(tasks.Value, chanOutForward)
 			}
 		case val := <-chanOutBackward:
 			// Only access visitedForward here
@@ -109,13 +110,13 @@ func BiDirectionalBFS(start, end string) []string {
 			// Only access visitedBackward here
 			if _, ok := visitedBackward.Load(val.Value); !ok {
 				visitedBackward.Store(val.Value, val)
-				tasksBackward <- val
+				tasksBackward.Add(val)
 			}
-		case tasks := <-tasksBackward:
+		case tasks := <-tasksBackward.C():
 			// Only access visitedBackward here
-			if _, ok := visitedBackward.Load(tasks.Value); !ok {
-				visitedBackward.Store(tasks.Value, tasks)
-				go ProcessNodeBi(tasks, chanOutBackward)
+			if _, ok := visitedBackward.Load(tasks.Value.Value); !ok {
+				visitedBackward.Store(tasks.Value.Value, tasks)
+				go ProcessNodeBi(tasks.Value, chanOutBackward)
 			}
 		}
 	}
@@ -201,12 +202,12 @@ func ProcessNodeBi(node *tree.Node, output chan *tree.Node) {
 
 /// * ============== Worker =============== * ///
 
-func workerBi(tasks <-chan *tree.Node, code int) {
-	for node := range tasks {
+func workerBi(tasks *priorityqueue.PriorityChannel, code int) {
+	for node := range tasks.C() {
 		if code == 1 {
-			ProcessNodeBi(node, chanOutForward)
+			ProcessNodeBi(node.Value, chanOutForward)
 		} else {
-			ProcessNodeBi(node, chanOutBackward)
+			ProcessNodeBi(node.Value, chanOutBackward)
 		}
 	}
 }
