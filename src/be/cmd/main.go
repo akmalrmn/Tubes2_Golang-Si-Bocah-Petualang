@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"runtime"
 	"time"
 )
 
@@ -57,6 +58,7 @@ func main() {
 		rw.Write(resp)
 	})
 	log.Println("Server is available at http://localhost:8000")
+	runtime.GOMAXPROCS(16)
 	handler = allowCORS(handler)
 
 	// ! Profiler
@@ -72,7 +74,7 @@ func main() {
 
 	// Call the BreadthFirstSearch function
 	start := time.Now()
-	result := bfs.BiDirectionalBFS("/wiki/Joko_Widodo", "/wiki/Receivership")
+	result := bfs.BiDirectionalBFS("/wiki/Joko_Widodo", "/wiki/Prabowo_Subianto")
 	elapsed := time.Since(start)
 
 	fmt.Println("Result: ", result)

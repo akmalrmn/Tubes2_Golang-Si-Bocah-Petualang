@@ -5,8 +5,9 @@ import (
 )
 
 type Node struct {
-    Value    string   
-	Parent  *Node
+    Value    string
+	Depth	 int
+	Parent   *Node
 	Children []*Node
 }
 
@@ -14,6 +15,7 @@ type Node struct {
 func NewNode(value string) *Node {
     return &Node{
         Value:    value,
+		Depth: 	  0,
 		Parent:   nil,
         Children: []*Node{},
     }
@@ -22,6 +24,7 @@ func NewNode(value string) *Node {
 // AddChild adds a child node to the current node
 func (n *Node) AddChild(child *Node) {
 	child.Parent = n
+	child.Depth = n.Depth + 1
     n.Children = append(n.Children, child)
 }
 

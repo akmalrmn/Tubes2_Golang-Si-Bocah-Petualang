@@ -7,7 +7,7 @@ import (
 )
 
 type Item struct {
-	value    *tree.Node
+	Value    *tree.Node
 	priority int
 	index    int
 }
@@ -77,13 +77,18 @@ func (pc *PriorityChannel) run() {
 	}
 }
 
-func (pc *PriorityChannel) Add(item *Item) {
+func (pc *PriorityChannel) Add(item *tree.Node) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
 	if pc.closed {
 		return
 	}
-	heap.Push(&pc.pq, item)
+	treeItem := &Item{
+		Value:    item,
+		priority: item.Depth,
+		index: item.Depth,
+	}
+	heap.Push(&pc.pq, treeItem)
 }
 
 func (pc *PriorityChannel) Close() {
