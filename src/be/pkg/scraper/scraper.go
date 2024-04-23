@@ -3,6 +3,7 @@ package scraper
 import (
 	"fmt"
 	"github.com/hashicorp/golang-lru"
+	"github.com/temoto/robotstxt"
 	"golang.org/x/net/html"
 	"net"
 	"net/http"
@@ -10,22 +11,44 @@ import (
 	"time"
 )
 
-var httpClient *http.Client
-var linkCache, _ = lru.New(1000) // Cache for the links
+var (
+	httpClient   *http.Client
+	LinkCache, _ = lru.New(1000)
+	ua           *robotstxt.Group
+)
+
 func Init() {
 	httpClient = createCustomHTTPClient()
+	resp, err := httpClient.Get("https://en.wikipedia.org/robots.txt")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer resp.Body.Close()
+
+	data, err := robotstxt.FromResponse(resp)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	ua = data.FindGroup("*")
+	if ua == nil {
+		fmt.Println("No group found for user agent")
+		return
+	}
 }
 
 var NumOfArticlesProcessed int
 
 func createCustomHTTPClient() *http.Client {
 	transport := &http.Transport{
-		MaxIdleConns:       10,
-		IdleConnTimeout:    30 * time.Second,
+		MaxIdleConns:       300,
+		IdleConnTimeout:    10 * time.Second,
 		DisableCompression: true,
 		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
+			Timeout:   10 * time.Second,
+			KeepAlive: 10 * time.Second,
 		}).DialContext,
 	}
 
@@ -34,18 +57,19 @@ func createCustomHTTPClient() *http.Client {
 	}
 }
 
-var LinkCache, _ = lru.New(1000)
-
 // ExtractLinks mengambil semua link dari halaman web Wikipedia
 func ExtractLinks(url string) ([]string, error) {
 
-	NumOfArticlesProcessed++ // Add the number of articles processed
+	if !ua.Test(url) {
+		return nil, fmt.Errorf("URL is not allowed by robots.txt")
+	}
 
-	if links, ok := linkCache.Get(url); ok {
+	if links, ok := LinkCache.Get(url); ok {
 		return links.([]string), nil
 	} // Check the cache before making an HTTP request
 
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
+	NumOfArticlesProcessed++
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +81,7 @@ func ExtractLinks(url string) ([]string, error) {
 		tt := z.Next()
 		switch tt {
 		case html.ErrorToken:
-			linkCache.Add(url, links)
+			LinkCache.Add(url, links)
 			return links, nil
 		case html.StartTagToken, html.SelfClosingTagToken:
 			t := z.Token()
@@ -76,7 +100,7 @@ func ExtractLinks(url string) ([]string, error) {
 }
 
 func ExtractLinksNonAdd(url string) ([]string, error) {
-	if links, ok := linkCache.Get(url); ok {
+	if links, ok := LinkCache.Get(url); ok {
 		return links.([]string), nil
 	}
 	resp, err := http.Get(url)
@@ -92,7 +116,7 @@ func ExtractLinksNonAdd(url string) ([]string, error) {
 		tt := z.Next()
 		switch tt {
 		case html.ErrorToken:
-			linkCache.Add(url, links)
+			LinkCache.Add(url, links)
 			return links, nil
 		case html.StartTagToken, html.SelfClosingTagToken:
 			t := z.Token()
@@ -115,7 +139,7 @@ func ExtractLinksNonAdd(url string) ([]string, error) {
 func ExtractLinksAsync(url string) ([]string, error) {
 
 	// Check the cache before making an HTTP request
-	if links, ok := linkCache.Get(url); ok {
+	if links, ok := LinkCache.Get(url); ok {
 		return links.([]string), nil
 	}
 
@@ -132,7 +156,7 @@ func ExtractLinksAsync(url string) ([]string, error) {
 			return
 		}
 		// Store the links in the cache
-		linkCache.Add(url, links)
+		LinkCache.Add(url, links)
 		result <- links
 	}()
 

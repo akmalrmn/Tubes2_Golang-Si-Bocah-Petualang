@@ -3,11 +3,17 @@ package main
 import (
 	"be/pkg/algorithms/bfs"
 	"be/pkg/scraper"
+	"be/pkg/tree"
 	"fmt"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
+	"os/signal"
 	"runtime"
+	"runtime/debug"
+	"sort"
+	"syscall"
 	"time"
 )
 
@@ -29,21 +35,30 @@ func allowCORS(next http.Handler) http.Handler {
 
 func main() {
 
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT)
+
+	go func() {
+		<-sigs
+		tree.Analyze(*bfs.TreeRoot)
+		os.Exit(0)
+	}()
+
 	//Create a new HTTP server
 	var handler http.Handler = http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		var resp []byte
 
 		// Get the query parameter
-		queryParams := req.URL.Query()
-		start := queryParams.Get("start")
-		end := queryParams.Get("end")
+		//queryParams := req.URL.Query()
+		//start := queryParams.Get("start")
+		//end := queryParams.Get("end")
 
 		if req.URL.Path == "/status" {
 			resp = []byte(`{"status": "ok"}`)
 		} else if req.URL.Path == "/bfs" {
 			// Call the BreadthFirstSearch function
-			result := bfs.BiDirectionalBFS(start, end)
-			resp = []byte(fmt.Sprintf(`{"result": "%v"}`, result))
+			//result := bfs.BiDirectionalBFS(start, end)
+			//resp = []byte(fmt.Sprintf(`{"result": "%v"}`, result))
 		} else if req.URL.Path == "/dfs" {
 			// Call the DepthFirstSearch function
 			// TODO implement the DepthFirstSearch function
@@ -59,6 +74,7 @@ func main() {
 	})
 	log.Println("Server is available at http://localhost:8000")
 	runtime.GOMAXPROCS(16)
+	debug.SetMaxThreads(50000)
 	handler = allowCORS(handler)
 
 	// ! Profiler
@@ -74,13 +90,21 @@ func main() {
 
 	// Call the BreadthFirstSearch function
 	start := time.Now()
-	result := bfs.BiDirectionalBFS("/wiki/Joko_Widodo", "/wiki/Prabowo_Subianto")
+	result := bfs.GetPathResult("/wiki/Joko_Widodo", "/wiki/Sleman_Regency")
 	elapsed := time.Since(start)
 
-	fmt.Println("Result: ", result)
+	printsliceString(result)
 	fmt.Println("Total article checked: ", scraper.NumOfArticlesProcessed)
 	fmt.Printf("Execution time: %d minute %d seconds %d miliseconds \n", int(elapsed.Minutes()), int(elapsed.Seconds())%60, (elapsed.Milliseconds())%1000)
-	// Print the result
+}
 
-	return
+func printsliceString(s [][]string) {
+	// Sort the slice of slices of string
+	sort.Slice(s, func(i, j int) bool {
+		return len(s[i]) < len(s[j])
+	})
+
+	for i, innerSlice := range s {
+		fmt.Printf("Path %d: %v\n", i+1, innerSlice)
+	}
 }
