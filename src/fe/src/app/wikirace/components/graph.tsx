@@ -2,13 +2,9 @@
 
 import React, { useEffect, useRef, memo } from "react";
 import * as d3 from "d3";
+import { Node, GraphData } from "./result";
 
-interface Node extends d3.SimulationNodeDatum {
-  id: number;
-  title: string;
-}
-
-const MyChart: React.FC = () => {
+const MyChart = ({ dataset }: { dataset: GraphData }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -23,29 +19,6 @@ const MyChart: React.FC = () => {
       .attr("height", height + margin.top + margin.bottom)
       .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
-
-    const dataset = {
-      // make 100 nodes
-      nodes: [
-        { id: 1, title: "Node 1" },
-        { id: 2, title: "Node 2" },
-        { id: 3, title: "Node 3" },
-        { id: 4, title: "Node 4" },
-        { id: 5, title: "Node 5" },
-        { id: 6, title: "Node 6" },
-        { id: 7, title: "Node 7" },
-      ],
-      // links 1-91
-      links: [
-        { source: 1, target: 2 },
-        { source: 2, target: 3 },
-        { source: 2, target: 4 },
-        { source: 3, target: 4 },
-        { source: 4, target: 5 },
-        { source: 5, target: 6 },
-        { source: 6, target: 7 },
-      ],
-    };
 
     const simulation = d3
       .forceSimulation<Node, d3.SimulationLinkDatum<Node>>(dataset.nodes)
@@ -79,6 +52,7 @@ const MyChart: React.FC = () => {
       .append("line")
       .style("stroke", "black")
       .attr("marker-end", "url(#arrow)");
+
     const node = svg
       .append("g")
       .attr("class", "nodes")
@@ -104,6 +78,16 @@ const MyChart: React.FC = () => {
           .on("end", (event: any, d: any) => dragended(event, d))
       )
       .style("cursor", "pointer");
+
+    const text = svg
+      .append("g")
+      .attr("class", "text")
+      .selectAll("text")
+      .data(dataset.nodes)
+      .enter()
+      .append("text")
+      .text((d: Node) => d.id)
+      .style("fill", "white");
 
     const title = svg
       .append("g")
@@ -133,8 +117,9 @@ const MyChart: React.FC = () => {
 
       node.attr("cx", (d: any) => d.x).attr("cy", (d: any) => d.y);
 
-
       title.attr("x", (d: any) => d.x - 20).attr("y", (d: any) => d.y - 30);
+
+      text.attr("x", (d: any) => d.x - 5).attr("y", (d: any) => d.y + 5);
     }
 
     function dragstarted(event: any, d: any) {
