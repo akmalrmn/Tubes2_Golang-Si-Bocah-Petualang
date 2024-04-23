@@ -20,7 +20,6 @@ export default function Loading(
 }
 
 function LoadingBar() {
-  console.log("LoadingBar");
   const backgroundStyle = {
     backgroundImage:
       "linear-gradient(-45deg, #000010 25%, #666666 25%, #666666 50%, #000010 50%,#000010 75%, #666666 75%)",
