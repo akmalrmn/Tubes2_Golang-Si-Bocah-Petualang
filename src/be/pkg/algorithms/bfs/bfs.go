@@ -57,6 +57,7 @@ func reset() {
 //   - It takes two parameters, start and end, which are the start and end nodes respectively.
 //   - It returns a slice of strings that represents the shortest path between the two nodes.
 func BiDirectionalBFS(start, end string) {
+	go trackGoroutines()               // ! Profiler ! //
 	defer func() { finished = true }() // Set finished to true when the function returns
 	reset()                            // Reset all global variables
 
@@ -79,10 +80,6 @@ func BiDirectionalBFS(start, end string) {
 		go workerBi(tasksForward, 1)
 		go workerBi(tasksBackward, 2)
 	}
-
-	// Add visitedForward and visitedBackward
-	visitedForward.Store(start, startNode)
-	visitedBackward.Store(end, endNode)
 
 	// Process the start and end nodes
 	tasksForward.Add(startNode)
@@ -126,16 +123,6 @@ func BiDirectionalBFS(start, end string) {
 			}
 
 		/*
-			Process the tasks
-			set the node as visited
-			process the node
-		*/
-		case tasks := <-tasksForward.C():
-			// Only access visitedForward here
-			visitedForward.Store(tasks.Value.Value, tasks.Value)
-			go ProcessNodeBi(tasks.Value, chanOutForward)
-
-		/*
 			Process the output of the workers
 			if the node is found in the other direction, check the path
 			if the node is not visited, add it to the tasks
@@ -149,15 +136,6 @@ func BiDirectionalBFS(start, end string) {
 			if _, ok := visitedBackward.Load(val.Value); !ok {
 				tasksBackward.Add(val)
 			}
-
-		/*
-			Process the tasks
-			set the node as visited
-			process the node
-		*/
-		case tasks := <-tasksBackward.C():
-			visitedBackward.Store(tasks.Value.Value, tasks.Value)
-			go ProcessNodeBi(tasks.Value, chanOutBackward)
 		}
 	}
 }
@@ -167,8 +145,8 @@ func BiDirectionalBFS(start, end string) {
 // GetPathResult is a function that returns the result of the BiDirectionalBFS function.
 func GetPathResult(start, end string) [][]string {
 	startTime := time.Now()
-	go BiDirectionalBFS(start, end)
-	go trackGoroutines() // ! Profiler ! //
+	BiDirectionalBFS(start, end)
+
 	for {
 		if pathResult.Size() > 0 && time.Since(startTime).Minutes() > 5 {
 			return pathResult.ToSlice()
@@ -267,9 +245,15 @@ func ProcessNodeBi(node *tree.Node, output chan<- *tree.Node) {
 func workerBi(tasks *priorityqueue.PriorityChannel, code int) {
 	for node := range tasks.C() {
 		if code == 1 {
-			ProcessNodeBi(node.Value, chanOutForward)
+			if _, ok := visitedForward.Load(node.Value); !ok {
+				visitedForward.Store(node.Value, node)
+				ProcessNodeBi(node.Value, chanOutForward)
+			}
 		} else {
-			ProcessNodeBi(node.Value, chanOutBackward)
+			if _, ok := visitedBackward.Load(node.Value); !ok {
+				visitedBackward.Store(node.Value, node)
+				ProcessNodeBi(node.Value, chanOutBackward)
+			}
 		}
 	}
 }
