@@ -70,7 +70,11 @@ func main() {
 		// Write the response
 		rw.Header().Set("Content-Type", "application/json")
 		rw.Header().Set("Content-Length", fmt.Sprint(len(resp)))
-		rw.Write(resp)
+		_, err := rw.Write(resp)
+		if err != nil {
+			log.Println(err)
+			return
+		}
 	})
 	log.Println("Server is available at http://localhost:8000")
 	runtime.GOMAXPROCS(16)

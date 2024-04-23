@@ -5,6 +5,7 @@ import (
 	"github.com/hashicorp/golang-lru"
 	"github.com/temoto/robotstxt"
 	"golang.org/x/net/html"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -12,11 +13,13 @@ import (
 )
 
 var (
-	httpClient   *http.Client
-	LinkCache, _ = lru.New(1000)
-	ua           *robotstxt.Group
+	httpClient             *http.Client
+	LinkCache, _           = lru.New(1000)
+	ua                     *robotstxt.Group
+	NumOfArticlesProcessed int
 )
 
+// Init inisialisasi HTTP client dan robots.txt
 func Init() {
 	httpClient = createCustomHTTPClient()
 	resp, err := httpClient.Get("https://en.wikipedia.org/robots.txt")
@@ -24,7 +27,12 @@ func Init() {
 		fmt.Println(err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}(resp.Body)
 
 	data, err := robotstxt.FromResponse(resp)
 	if err != nil {
@@ -39,8 +47,7 @@ func Init() {
 	}
 }
 
-var NumOfArticlesProcessed int
-
+// createCustomHTTPClient membuat HTTP client dengan konfigurasi khusus
 func createCustomHTTPClient() *http.Client {
 	transport := &http.Transport{
 		MaxIdleConns:       300,
@@ -73,7 +80,12 @@ func ExtractLinks(url string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}(resp.Body)
 
 	var links []string
 	z := html.NewTokenizer(resp.Body)
@@ -95,10 +107,13 @@ func ExtractLinks(url string) ([]string, error) {
 					}
 				}
 			}
+		default:
+			continue
 		}
 	}
 }
 
+// ExtractLinksNonAdd mengambil semua link dari halaman web Wikipedia tanpa menambahkan counter artikel yang telah di proses
 func ExtractLinksNonAdd(url string) ([]string, error) {
 	if links, ok := LinkCache.Get(url); ok {
 		return links.([]string), nil
@@ -108,7 +123,12 @@ func ExtractLinksNonAdd(url string) ([]string, error) {
 		fmt.Println("Error: ", err)
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}(resp.Body)
 
 	var links []string
 	z := html.NewTokenizer(resp.Body)
@@ -130,12 +150,13 @@ func ExtractLinksNonAdd(url string) ([]string, error) {
 					}
 				}
 			}
+		default:
+			continue
 		}
 	}
 }
 
-// Fungsi rekursif untuk mengekstrak link dari node HTML
-
+// ExtractLinksAsync mengambil semua link dari halaman web Wikipedia secara asynchronous
 func ExtractLinksAsync(url string) ([]string, error) {
 
 	// Check the cache before making an HTTP request
@@ -168,27 +189,14 @@ func ExtractLinksAsync(url string) ([]string, error) {
 	}
 }
 
-func makeUnique(links []string) []string {
-	keys := make(map[string]bool)
-	var uniqueLinks []string
-	for _, link := range links {
-		if _, value := keys[link]; !value {
-			keys[link] = true
-			uniqueLinks = append(uniqueLinks, link)
-		}
-	}
-	return uniqueLinks
-}
-
 func linkToTitle(link string) string {
+	link = strings.TrimPrefix(link, "/wiki/")
 	parts := strings.Split(link, "/")
 	replaced := strings.Replace(parts[len(parts)-1], "_", " ", -1)
-
 	return replaced
 }
 
 func titleToLink(title string) string {
 	replaced := strings.Replace(title, " ", "_", -1)
-
 	return "/wiki/" + replaced
 }

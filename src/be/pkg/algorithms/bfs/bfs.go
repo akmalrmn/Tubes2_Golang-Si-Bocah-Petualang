@@ -14,59 +14,51 @@ import (
 ///  * ============== Var =============== * ///
 
 var (
-	maxGoRoutines = 10
+	maxGoRoutines = 10 // Maksismal jumlah goroutine yang akan dijalankan
 
-	chanOutForward  = make(chan *tree.Node, 9999)
+	// Channel untuk mengirimkan node yang sudah di proses
+	chanOutForward  = make(chan *tree.Node, 10000)
 	chanOutBackward = make(chan *tree.Node, 9999)
 
+	// Map untuk menyimpan node yang sudah di proses
 	visitedForward  sync.Map
 	visitedBackward sync.Map
 
+	// Set untuk menyimpan hasil path && status apakah sudah selesai
 	finished   = false
-	pathResult  = set.NewSetOfSlice()
+	pathResult = set.NewSetOfSlice()
 
+	// Max limit untuk goroutine yang akan ditingkatkan
 	increaseLimit = 800
 
+	// TreeRoot Node root untuk tree awal debugging
 	TreeRoot *tree.Node
 )
 
+/*
+ * Reset function, digunakan untuk mereset semua variabel global
+ */
 func reset() {
 	maxGoRoutines = 10
-
-	chanOutForward = make(chan *tree.Node, 9999)
-	chanOutBackward = make(chan *tree.Node, 9999)
-
+	chanOutForward = make(chan *tree.Node, 10000)
+	chanOutBackward = make(chan *tree.Node, 10000)
 	visitedForward = sync.Map{}
 	visitedBackward = sync.Map{}
-
 	pathResult = set.NewSetOfSlice()
-
 	finished = false
 	increaseLimit = 800
+	TreeRoot = nil
 }
-
 
 ///  * ============== Function =============== * ///
-
-func GetPathResult(start, end string) [][]string {
-	startTime := time.Now()
-	BiDirectionalBFS(start, end)
-	for {
-		if pathResult.Size() > 0 && time.Since(startTime).Minutes() > 5 {
-			return pathResult.ToSlice()
-		}
-	}
-}
 
 // BiDirectionalBFS
 //   - BiDirectionalBFS is a function that finds the shortest path between two nodes using the Bi-Directional Breadth First Search algorithm.
 //   - It takes two parameters, start and end, which are the start and end nodes respectively.
 //   - It returns a slice of strings that represents the shortest path between the two nodes.
 func BiDirectionalBFS(start, end string) {
-	go trackGoroutines() // ! Profiler ! //
-	defer func() { finished = true }()
-
-	reset()
+	defer func() { finished = true }() // Set finished to true when the function returns
+	reset()                            // Reset all global variables
 
 	startTime := time.Now()
 
@@ -78,6 +70,7 @@ func BiDirectionalBFS(start, end string) {
 	TreeRoot = startNode
 	endNode := tree.NewNode(end)
 
+	// Create priority queue
 	tasksForward := priorityqueue.NewPriorityChannel()
 	tasksBackward := priorityqueue.NewPriorityChannel()
 
@@ -95,9 +88,7 @@ func BiDirectionalBFS(start, end string) {
 	tasksForward.Add(startNode)
 	tasksBackward.Add(endNode)
 
-
-
-	go func() {
+	go func() { // Increase the limit of goroutines every 5 seconds
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -115,10 +106,15 @@ func BiDirectionalBFS(start, end string) {
 	}()
 
 	for {
-		if time.Since(startTime).Minutes() > 1 && pathResult.Size() > 0 {
+		if time.Since(startTime).Minutes() > 5 && pathResult.Size() > 0 { // If the execution time exceeds 1 minute and there is a path result
 			return
 		}
 		select {
+		/*
+			Process the output of the workers
+			if the node is found in the other direction, check the path
+			if the node is not visited, add it to the tasks
+		*/
 		case val := <-chanOutForward:
 			// Only access visitedBackward here
 			if node, ok := visitedBackward.Load(val.Value); ok {
@@ -128,10 +124,22 @@ func BiDirectionalBFS(start, end string) {
 			if _, ok := visitedForward.Load(val.Value); !ok {
 				tasksForward.Add(val)
 			}
+
+		/*
+			Process the tasks
+			set the node as visited
+			process the node
+		*/
 		case tasks := <-tasksForward.C():
 			// Only access visitedForward here
 			visitedForward.Store(tasks.Value.Value, tasks.Value)
 			go ProcessNodeBi(tasks.Value, chanOutForward)
+
+		/*
+			Process the output of the workers
+			if the node is found in the other direction, check the path
+			if the node is not visited, add it to the tasks
+		*/
 		case val := <-chanOutBackward:
 			// Only access visitedForward here
 			if node, ok := visitedForward.Load(val.Value); ok {
@@ -141,6 +149,12 @@ func BiDirectionalBFS(start, end string) {
 			if _, ok := visitedBackward.Load(val.Value); !ok {
 				tasksBackward.Add(val)
 			}
+
+		/*
+			Process the tasks
+			set the node as visited
+			process the node
+		*/
 		case tasks := <-tasksBackward.C():
 			visitedBackward.Store(tasks.Value.Value, tasks.Value)
 			go ProcessNodeBi(tasks.Value, chanOutBackward)
@@ -148,21 +162,21 @@ func BiDirectionalBFS(start, end string) {
 	}
 }
 
-func equal(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i, v := range a {
-		if v != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-
 ///  * ============== Helper =============== * ///
 
+// GetPathResult is a function that returns the result of the BiDirectionalBFS function.
+func GetPathResult(start, end string) [][]string {
+	startTime := time.Now()
+	go BiDirectionalBFS(start, end)
+	go trackGoroutines() // ! Profiler ! //
+	for {
+		if pathResult.Size() > 0 && time.Since(startTime).Minutes() > 5 {
+			return pathResult.ToSlice()
+		}
+	}
+}
+
+// checkPathValidity is a function that checks the validity of the path.
 func checkPathValidity(path []string) {
 	results := make([]<-chan bool, len(path)-1)
 
@@ -179,6 +193,7 @@ func checkPathValidity(path []string) {
 	pathResult.Add(path)
 }
 
+// checkLinkContainAsync is a function that checks if a link contains another link asynchronously.
 func checkLinkContainAsync(start, end string) <-chan bool {
 	result := make(chan bool)
 	go func() {
@@ -188,6 +203,7 @@ func checkLinkContainAsync(start, end string) <-chan bool {
 	return result
 }
 
+// linkContain is a function that checks if a link contains another link.
 func linkContain(start, end string) bool {
 	links, _ := scraper.ExtractLinksNonAdd("https://en.wikipedia.org" + start)
 
@@ -199,6 +215,7 @@ func linkContain(start, end string) bool {
 	return false
 }
 
+// returnPathBiBFS is a function that returns the path of the Bi-Directional BFS algorithm.
 func returnPathBiBFS(midStart, midEnd *tree.Node) []string {
 	var path []string
 	for midStart != nil {
@@ -214,6 +231,7 @@ func returnPathBiBFS(midStart, midEnd *tree.Node) []string {
 	return path
 }
 
+// reverse is a function that reverses a slice of strings.
 func reverse(path []string) []string {
 	for i := 0; i < len(path)/2; i++ {
 		j := len(path) - i - 1
@@ -224,6 +242,7 @@ func reverse(path []string) []string {
 
 ///  * ============== Process Node =============== * ///
 
+// ProcessNodeBi is a function that processes a node in the Bi-Directional BFS algorithm.
 func ProcessNodeBi(node *tree.Node, output chan<- *tree.Node) {
 	links, err := scraper.ExtractLinksAsync("https://en.wikipedia.org" + node.Value)
 
@@ -233,6 +252,9 @@ func ProcessNodeBi(node *tree.Node, output chan<- *tree.Node) {
 	}
 
 	for _, link := range links {
+		if link == node.Value {
+			continue
+		}
 		child := *tree.NewNode(link)
 		node.AddChild(&child)
 		output <- &child
@@ -241,6 +263,7 @@ func ProcessNodeBi(node *tree.Node, output chan<- *tree.Node) {
 
 /// * ============== Worker =============== * ///
 
+// workerBi is a function that processes the nodes in the Bi-Directional BFS algorithm.
 func workerBi(tasks *priorityqueue.PriorityChannel, code int) {
 	for node := range tasks.C() {
 		if code == 1 {
@@ -251,6 +274,8 @@ func workerBi(tasks *priorityqueue.PriorityChannel, code int) {
 	}
 }
 
+// / ! ============== Profiler =============== ! ///
+// trackGoroutines is a function that tracks the number of goroutines, the number of articles processed, and the maximum number of goroutines.
 func trackGoroutines() {
 	start := time.Now()
 	for {

@@ -24,7 +24,10 @@ func NewDatabase() *Database {
 
 // Close closes the database connection
 func (d *Database) Close() {
-	d.db.Close()
+	err := d.db.Close()
+	if err != nil {
+		return
+	}
 }
 
 // GetPath returns the path between two nodes
@@ -36,7 +39,12 @@ func (d *Database) GetPath(start, end string) []string {
 		log.Println(err)
 		return path
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(rows)
 	for rows.Next() {
 		var value string
 		err = rows.Scan(&value)

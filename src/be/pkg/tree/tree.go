@@ -14,20 +14,36 @@ var (
 )
 
 func Analyze(root Node) {
-	gographviz.Analyse(graphAst, graph)
+	err := gographviz.Analyse(graphAst, graph)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	traverse(&root, graph)
-	os.WriteFile("graph.dot", []byte(graph.String()), 0644)
+	err = os.WriteFile("graph.dot", []byte(graph.String()), 0644)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }
 
 func traverse(node *Node, graph *gographviz.Graph) {
 
 	// Add the node to the graph
-	graph.AddNode("G", node.Name, nil)
+	err := graph.AddNode("G", node.Name, nil)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	// If the node has a parent, add an edge from the parent to the node
 	if node.Parent != nil {
-		graph.AddEdge(node.Parent.Name, node.Name, true, nil)
+		err := graph.AddEdge(node.Parent.Name, node.Name, true, nil)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 	}
 
 	// Traverse the node's children
@@ -63,8 +79,8 @@ func NewNode(value string) *Node {
 	}
 
 	// Loop over the map and replace all occurrences of each character
-	for old, new := range replacements {
-		value = strings.ReplaceAll(value, old, new)
+	for old, newer := range replacements {
+		value = strings.ReplaceAll(value, old, newer)
 	}
 
 	// Replace any string that matches the pattern "%__"
