@@ -79,7 +79,6 @@ const MyChart: React.FC = () => {
       .append("line")
       .style("stroke", "black")
       .attr("marker-end", "url(#arrow)");
-
     const node = svg
       .append("g")
       .attr("class", "nodes")
@@ -87,7 +86,16 @@ const MyChart: React.FC = () => {
       .data(dataset.nodes)
       .enter()
       .append("circle")
-      .attr("r", 20)
+      .attr("r", (d: Node) => {
+        if (d.id === 1) return 25;
+        if (d.id === dataset.nodes.length) return 25;
+        return 20;
+      })
+      .style("fill", (d: Node) => {
+        if (d.id === 1) return "blue";
+        if (d.id === dataset.nodes.length) return "green";
+        return "black";
+      })
       .call(
         d3
           .drag<SVGCircleElement, Node>()
@@ -95,17 +103,7 @@ const MyChart: React.FC = () => {
           .on("drag", (event: any, d: any) => dragged(event, d))
           .on("end", (event: any, d: any) => dragended(event, d))
       )
-      .style("fill", "black");
-
-    const text = svg
-      .append("g")
-      .attr("class", "text")
-      .selectAll("text")
-      .data(dataset.nodes)
-      .enter()
-      .append("text")
-      .text((d: Node) => d.id)
-      .style("fill", "white");
+      .style("cursor", "pointer");
 
     const title = svg
       .append("g")
@@ -135,7 +133,6 @@ const MyChart: React.FC = () => {
 
       node.attr("cx", (d: any) => d.x).attr("cy", (d: any) => d.y);
 
-      text.attr("x", (d: any) => d.x - 5).attr("y", (d: any) => d.y + 5);
 
       title.attr("x", (d: any) => d.x - 20).attr("y", (d: any) => d.y - 30);
     }
