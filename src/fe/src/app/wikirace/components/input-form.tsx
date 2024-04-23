@@ -2,10 +2,11 @@
 
 import React, { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { SubmitHandler, set, useForm } from "react-hook-form";
-import TurnArrow from "./arrow-left-right";
-import { revalidatePath, revalidateTag } from "next/cache";
-import Checkmark from "./checkmark";
+import { SubmitHandler, UseFormSetValue, useForm } from "react-hook-form";
+import TurnArrow from "../../../components/icons/arrow-left-right";
+import Checkmark from "../../../components/icons/checkmark";
+import axios from "axios";
+import useDebounce from "../../../hooks/useDebounce";
 
 interface Inputs {
   start: string;
@@ -13,11 +14,17 @@ interface Inputs {
   algorithm: string;
 }
 
-function InputForm() {
+export default function InputForm() {
   const router = useRouter();
   const params = useSearchParams();
 
-  const { register, handleSubmit, setValue, getValues } = useForm<Inputs>();
+  const { register, handleSubmit, setValue, getValues } = useForm<Inputs>({
+    defaultValues: {
+      start: "",
+      target: "",
+      algorithm: "bfs",
+    },
+  });
 
   const onSubmit: SubmitHandler<Inputs> = (data) => {
     router.push(
@@ -26,7 +33,6 @@ function InputForm() {
   };
 
   const onArrowClick = () => {
-    console.log("clicked", getValues("start"), getValues("target"));
     const temp = getValues("start");
     setValue("start", getValues("target"));
     setValue("target", temp);
@@ -37,6 +43,12 @@ function InputForm() {
       setValue("start", params.get("start") as string);
       setValue("target", params.get("target") as string);
     }
+
+    if (params.has("algorithm") && params.get("algorithm") === "ids") {
+      setValue("algorithm", "ids");
+    } else {
+      setValue("algorithm", "bfs");
+    }
   }, []);
 
   return (
@@ -45,11 +57,16 @@ function InputForm() {
       className='flex flex-col space-y-4 items-center text-xl'
     >
       <div className='flex flex-row space-x-8 items-center'>
-        <input
-          {...register("start")}
-          placeholder='Start'
-          className='p-2 border-2 border-black w-56'
-        />
+        <div className='w-fit relative'>
+          <InputSuggestion
+            register={{
+              ...register("start"),
+              placeholder: "Start",
+            }}
+            type='start'
+            setValue={setValue}
+          />
+        </div>
 
         <button
           type='button'
@@ -59,11 +76,16 @@ function InputForm() {
           <TurnArrow />
         </button>
 
-        <input
-          {...register("target")}
-          placeholder='Target'
-          className='p-2 border-2 border-black w-56'
-        />
+        <div className='w-fit relative'>
+          <InputSuggestion
+            register={{
+              ...register("target"),
+              placeholder: "Target",
+            }}
+            type='target'
+            setValue={setValue}
+          />
+        </div>
       </div>
 
       <div className='text-gray-700 text-xl pt-6'>
@@ -72,51 +94,25 @@ function InputForm() {
 
       <div className='flex gap-8 text-xl'>
         <div className='inline-flex items-center'>
-          <label
-            className='relative flex items-center p-3 rounded-full cursor-pointer'
-            htmlFor='algorithm'
-            id='algorithm'
-          >
-            <input
-              {...register("algorithm")}
-              type='radio'
-              value={"bfs"}
-              className="before:content[''] peer relative h-5 w-5 cursor-pointer appearance-none rounded-full border border-blue-gray-200 text-gray-900 transition-all before:absolute before:top-2/4 before:left-2/4 before:block before:h-12 before:w-12 before:-translate-y-2/4 before:-translate-x-2/4 before:rounded-full before:bg-blue-gray-500 before:opacity-0 before:transition-opacity checked:border-gray-900 checked:before:bg-gray-900 hover:before:opacity-10"
-            />
-            <span className='absolute text-gray-900 transition-opacity opacity-0 pointer-events-none top-2/4 left-2/4 -translate-y-2/4 -translate-x-2/4 peer-checked:opacity-100 scale-125'>
-              <Checkmark />
-            </span>
-          </label>
-          <label
-            className='mt-px font-light text-gray-700 cursor-pointer select-none'
-            htmlFor='algorithm'
-            id='algorithm'
-          >
-            Breath First Search
-          </label>
+          <CheckBoxInput
+            text='Breadth First Search'
+            register={{
+              ...register("algorithm"),
+              value: "bfs",
+              type: "radio",
+            }}
+          />
         </div>
 
         <div className='inline-flex items-center'>
-          <label
-            className='relative flex items-center p-3 rounded-full cursor-pointer'
-            htmlFor='html'
-          >
-            <input
-              {...register("algorithm")}
-              value={"ids"}
-              type='radio'
-              className="before:content[''] peer relative h-5 w-5 cursor-pointer appearance-none rounded-full border border-blue-gray-200 text-gray-900 transition-all before:absolute before:top-2/4 before:left-2/4 before:block before:h-12 before:w-12 before:-translate-y-2/4 before:-translate-x-2/4 before:rounded-full before:bg-blue-gray-500 before:opacity-0 before:transition-opacity checked:border-gray-900 checked:before:bg-gray-900 hover:before:opacity-10"
-            />
-            <span className='absolute text-gray-900 transition-opacity opacity-0 pointer-events-none top-2/4 left-2/4 -translate-y-2/4 -translate-x-2/4 peer-checked:opacity-100 scale-125'>
-              <Checkmark />
-            </span>
-          </label>
-          <label
-            className='mt-px font-light text-gray-700 cursor-pointer select-none'
-            htmlFor='html'
-          >
-            Iterative Deepening Search
-          </label>
+          <CheckBoxInput
+            text='Iterative Deepening Search'
+            register={{
+              ...register("algorithm"),
+              value: "ids",
+              type: "radio",
+            }}
+          />
         </div>
       </div>
 
@@ -127,4 +123,137 @@ function InputForm() {
   );
 }
 
-export default InputForm;
+function CheckBoxInput({
+  text,
+  register,
+}: {
+  text: string;
+  register: React.DetailedHTMLProps<
+    React.InputHTMLAttributes<HTMLInputElement>,
+    HTMLInputElement
+  >;
+}) {
+  return (
+    <>
+      <label
+        className='relative flex items-center p-3 rounded-full cursor-pointer'
+        htmlFor='html'
+      >
+        <input
+          {...register}
+          className="before:content[''] peer relative h-5 w-5 cursor-pointer appearance-none rounded-full border border-blue-gray-200 text-gray-900 transition-all before:absolute before:top-2/4 before:left-2/4 before:block before:h-12 before:w-12 before:-translate-y-2/4 before:-translate-x-2/4 before:rounded-full before:bg-blue-gray-500 before:opacity-0 before:transition-opacity checked:border-gray-900 checked:before:bg-gray-900 hover:before:opacity-10"
+        />
+        <span className='absolute text-gray-900 transition-opacity opacity-0 pointer-events-none top-2/4 left-2/4 -translate-y-2/4 -translate-x-2/4 peer-checked:opacity-100 scale-125'>
+          <Checkmark />
+        </span>
+      </label>
+      <label
+        className='mt-px font-light text-gray-700 cursor-pointer select-none'
+        htmlFor='html'
+      >
+        {text}
+      </label>
+    </>
+  );
+}
+
+function InputSuggestion({
+  register,
+  type,
+  setValue,
+}: {
+  register: React.DetailedHTMLProps<
+    React.InputHTMLAttributes<HTMLInputElement>,
+    HTMLInputElement
+  >;
+  type: "start" | "target";
+  setValue: UseFormSetValue<Inputs>;
+}) {
+  const [search, setSearch] = React.useState<string>("");
+  const debouncedValue = useDebounce(search);
+  const [data, setData] = React.useState<string[] | null>(null);
+
+  function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
+    setSearch(event.target.value);
+  }
+
+  function handleClick(title: string) {
+    setValue(type, title);
+
+    setData(null);
+  }
+
+  async function fetchData() {
+    const queryParams = {
+      action: "query",
+      format: "json",
+      gpssearch: debouncedValue,
+      generator: "prefixsearch",
+      prop: "pageprops|pageimages|pageterms",
+      redirects: "",
+      ppprop: "displaytitle",
+      piprop: "thumbnail",
+      pithumbsize: "160",
+      pilimit: "30",
+      wbptterms: "description",
+      gpsnamespace: 0,
+      gpslimit: 5,
+      origin: "*",
+    };
+
+    try {
+      const response = await axios({
+        method: "get",
+        params: queryParams,
+        url: process.env.WIKIPEDIA_API_URL,
+        headers: {
+          "Api-User-Agent": "Tubes 2 Stima ITB; 13522122@std.stei.itb.ac.id",
+        },
+      });
+
+      const title: string[] = [];
+
+      for (const key in response.data.query.pages) {
+        title.push(response.data.query.pages[key].title);
+      }
+
+      return title;
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  }
+
+  useEffect(() => {
+    if (debouncedValue) {
+      fetchData().then((data) => {
+        if (data) {
+          setData(data);
+        }
+      });
+    }
+  }, [debouncedValue]);
+
+  return (
+    <>
+      <input
+        {...register}
+        onChange={handleChange}
+        className='p-2 border-2 border-black w-56'
+      />
+      {data && (
+        <div className='h-fit w-full bg-white absolute border-black border-2 border-t-0 z-30'>
+          {data.map((title) => (
+            <div
+              key={title}
+              className='p-2 text-black hover:bg-slate-400 cursor-pointer'
+              onClick={() => handleClick(title)}
+            >
+              {title}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}

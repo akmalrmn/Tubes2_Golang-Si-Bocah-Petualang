@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Particles, { initParticlesEngine } from "@tsparticles/react";
 import { type Container, type ISourceOptions } from "@tsparticles/engine";
-import { loadFull } from "tsparticles"; // if you are going to use `loadFull`, install the "tsparticles" package too.
+import { loadFull } from "tsparticles";
 
 export const ParticleBackground = () => {
   const [init, setInit] = useState(false);
@@ -120,7 +120,6 @@ export const ParticleBackground = () => {
         id='tsparticles'
         particlesLoaded={particlesLoaded}
         options={configs}
-        // add fade in animation
         className='animate-fade'
       />
     );
