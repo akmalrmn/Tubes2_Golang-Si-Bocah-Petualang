@@ -1,274 +1,91 @@
 package bfs
 
 import (
-	priorityqueue "be/pkg/PriorityQueue"
-	"be/pkg/scraper"
-	"be/pkg/set"
 	"be/pkg/tree"
 	"fmt"
-	"runtime"
-	"sync"
+	"github.com/gocolly/colly"
+	"github.com/gocolly/colly/queue"
+	"net/http"
+	"regexp"
+	"strings"
 	"time"
 )
 
-///  * ============== Var =============== * ///
+func BFS(starts, ends string) []string {
 
-var (
-	maxGoRoutines = 10 // Maksismal jumlah goroutine yang akan dijalankan
-
-	// Channel untuk mengirimkan node yang sudah di proses
-	chanOutForward  = make(chan *tree.Node, 10000)
-	chanOutBackward = make(chan *tree.Node, 9999)
-
-	// Map untuk menyimpan node yang sudah di proses
-	visitedForward  sync.Map
-	visitedBackward sync.Map
-
-	// Set untuk menyimpan hasil path && status apakah sudah selesai
-	finished   = false
-	pathResult = set.NewSetOfSlice()
-
-	// Max limit untuk goroutine yang akan ditingkatkan
-	increaseLimit = 800
-
-	// TreeRoot Node root untuk tree awal debugging
-	TreeRoot *tree.Node
-)
-
-/*
- * Reset function, digunakan untuk mereset semua variabel global
- */
-func reset() {
-	maxGoRoutines = 10
-	chanOutForward = make(chan *tree.Node, 10000)
-	chanOutBackward = make(chan *tree.Node, 10000)
-	visitedForward = sync.Map{}
-	visitedBackward = sync.Map{}
-	pathResult = set.NewSetOfSlice()
-	finished = false
-	increaseLimit = 800
-	TreeRoot = nil
-}
-
-///  * ============== Function =============== * ///
-
-// BiDirectionalBFS
-//   - BiDirectionalBFS is a function that finds the shortest path between two nodes using the Bi-Directional Breadth First Search algorithm.
-//   - It takes two parameters, start and end, which are the start and end nodes respectively.
-//   - It returns a slice of strings that represents the shortest path between the two nodes.
-func BiDirectionalBFS(start, end string) {
-	go trackGoroutines()               // ! Profiler ! //
-	defer func() { finished = true }() // Set finished to true when the function returns
-	reset()                            // Reset all global variables
-
-	startTime := time.Now()
-
-	// Delete Links Cache
-	scraper.LinkCache.Purge()
-
-	// Create start and end nodes
-	startNode := tree.NewNode(start)
-	TreeRoot = startNode
-	endNode := tree.NewNode(end)
-
-	// Create priority queue
-	tasksForward := priorityqueue.NewPriorityChannel()
-	tasksBackward := priorityqueue.NewPriorityChannel()
-
-	// Create worker pool
-	for i := 0; i < maxGoRoutines/2; i++ {
-		go workerBi(tasksForward, 1)
-		go workerBi(tasksBackward, 2)
+	client := &http.Client{
+		Timeout: 30 * time.Second, // Set timeout to 30 seconds
 	}
 
-	// Process the start and end nodes
-	tasksForward.Add(startNode)
-	tasksBackward.Add(endNode)
+	// Instantiate a new collector
+	c := colly.NewCollector(
+		colly.AllowedDomains("en.wikipedia.org"),
+		colly.Async(true),
+		colly.UserAgent("Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/47.0"),
+		colly.URLFilters(
+			regexp.MustCompile(`https://en\.wikipedia\.org/wiki/.*`),
+		),
+		colly.WithTransport(client.Transport), // Use the custom HTTP client
+	)
 
-	go func() { // Increase the limit of goroutines every 5 seconds
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if !finished && maxGoRoutines < increaseLimit {
-					maxGoRoutines += 10 // Increase the limit by 10
-					for i := 0; i < 5; i++ {
-						go workerBi(tasksForward, 1)
-						go workerBi(tasksBackward, 2)
-					}
-				}
+	// Create a request queue with 16 consumer threads
+	q, _ := queue.New(
+		16, // Number of consumer threads
+		&queue.InMemoryQueueStorage{MaxSize: 10000}, // Use default queue storage
+	)
+
+	// Limit the number of threads started by colly
+	c.Limit(&colly.LimitRule{
+		DomainGlob:  "en.wikipedia.org",
+		Parallelism: 400,
+	})
+
+	// Print the URL of the page visited
+	c.OnRequest(func(r *colly.Request) {
+		fmt.Println("Visiting", r.URL.String())
+	})
+
+	// Print error if something went wrong
+	c.OnError(func(_ *colly.Response, err error) {
+		fmt.Println("Something went wrong:", err)
+	})
+
+	// Make a channel to receive the result
+	result := make(chan []string)
+
+	// Set the URL to start scraping from
+	q.AddURL("https://en.wikipedia.org" + starts)
+
+	// Root Tree
+	root := tree.NewNode(starts)
+
+	// Set the handler for the start URL
+	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
+		link := e.Attr("href")
+		if !strings.HasPrefix(link, "/wiki/Main_Page") && !strings.HasPrefix(link, "/wiki/File") && !strings.HasPrefix(link, "/wiki/Special") && !strings.HasPrefix(link, "/wiki/Wikipedia") && !strings.HasPrefix(link, "/wiki/Help") && !strings.HasPrefix(link, "/wiki/Portal") && !strings.HasPrefix(link, "/wiki/Template") && !strings.HasPrefix(link, "/wiki/Category") && !strings.HasPrefix(link, "/wiki/Talk") && !strings.HasPrefix(link, "/wiki/Wikipedia") {
+			q.AddURL(e.Request.AbsoluteURL(link))
+			node := tree.NewNode(link)
+			root.AddChild(node)
+
+			if link == ends {
+				result <- traverseToRoot(node)
 			}
 		}
-	}()
+	})
 
 	for {
-		if time.Since(startTime).Minutes() > 5 && pathResult.Size() > 0 { // If the execution time exceeds 1 minute and there is a path result
-			return
-		}
-		select {
-		/*
-			Process the output of the workers
-			if the node is found in the other direction, check the path
-			if the node is not visited, add it to the tasks
-		*/
-		case val := <-chanOutForward:
-			// Only access visitedBackward here
-			if node, ok := visitedBackward.Load(val.Value); ok {
-				path := returnPathBiBFS(val, node.(*tree.Node))
-				go checkPathValidity(path)
-			}
-			if _, ok := visitedForward.Load(val.Value); !ok {
-				tasksForward.Add(val)
-			}
-
-		/*
-			Process the output of the workers
-			if the node is found in the other direction, check the path
-			if the node is not visited, add it to the tasks
-		*/
-		case val := <-chanOutBackward:
-			// Only access visitedForward here
-			if node, ok := visitedForward.Load(val.Value); ok {
-				path := returnPathBiBFS(node.(*tree.Node), val)
-				go checkPathValidity(path)
-			}
-			if _, ok := visitedBackward.Load(val.Value); !ok {
-				tasksBackward.Add(val)
-			}
-		}
-	}
-}
-
-///  * ============== Helper =============== * ///
-
-// GetPathResult is a function that returns the result of the BiDirectionalBFS function.
-func GetPathResult(start, end string) [][]string {
-	startTime := time.Now()
-	BiDirectionalBFS(start, end)
-
-	for {
-		if pathResult.Size() > 0 && time.Since(startTime).Minutes() > 5 {
-			return pathResult.ToSlice()
-		}
-	}
-}
-
-// checkPathValidity is a function that checks the validity of the path.
-func checkPathValidity(path []string) {
-	results := make([]<-chan bool, len(path)-1)
-
-	for i := 0; i < len(path)-1; i++ {
-		results[i] = checkLinkContainAsync(path[i], path[i+1])
+		q.Run(c)
 	}
 
-	for _, result := range results {
-		if !<-result {
-			return
-		}
-	}
-
-	pathResult.Add(path)
+	// Return the result
+	return <-result
 }
 
-// checkLinkContainAsync is a function that checks if a link contains another link asynchronously.
-func checkLinkContainAsync(start, end string) <-chan bool {
-	result := make(chan bool)
-	go func() {
-		defer close(result)
-		result <- linkContain(start, end)
-	}()
-	return result
-}
-
-// linkContain is a function that checks if a link contains another link.
-func linkContain(start, end string) bool {
-	links, _ := scraper.ExtractLinksNonAdd("https://en.wikipedia.org" + start)
-
-	for _, link := range links {
-		if link == end {
-			return true
-		}
-	}
-	return false
-}
-
-// returnPathBiBFS is a function that returns the path of the Bi-Directional BFS algorithm.
-func returnPathBiBFS(midStart, midEnd *tree.Node) []string {
+func traverseToRoot(endNode *tree.Node) []string {
 	var path []string
-	for midStart != nil {
-		path = append(path, midStart.Value)
-		midStart = midStart.Parent
-	}
-	path = reverse(path)
-	midEnd = midEnd.Parent
-	for midEnd != nil {
-		path = append(path, midEnd.Value)
-		midEnd = midEnd.Parent
+	for endNode != nil {
+		path = append(path, endNode.Value)
+		endNode = endNode.Parent
 	}
 	return path
-}
-
-// reverse is a function that reverses a slice of strings.
-func reverse(path []string) []string {
-	for i := 0; i < len(path)/2; i++ {
-		j := len(path) - i - 1
-		path[i], path[j] = path[j], path[i]
-	}
-	return path
-}
-
-///  * ============== Process Node =============== * ///
-
-// ProcessNodeBi is a function that processes a node in the Bi-Directional BFS algorithm.
-func ProcessNodeBi(node *tree.Node, output chan<- *tree.Node) {
-	links, err := scraper.ExtractLinksAsync("https://en.wikipedia.org" + node.Value)
-
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	for _, link := range links {
-		if link == node.Value {
-			continue
-		}
-		child := *tree.NewNode(link)
-		node.AddChild(&child)
-		output <- &child
-	}
-}
-
-/// * ============== Worker =============== * ///
-
-// workerBi is a function that processes the nodes in the Bi-Directional BFS algorithm.
-func workerBi(tasks *priorityqueue.PriorityChannel, code int) {
-	for node := range tasks.C() {
-		if code == 1 {
-			if _, ok := visitedForward.Load(node.Value); !ok {
-				visitedForward.Store(node.Value, node)
-				ProcessNodeBi(node.Value, chanOutForward)
-			}
-		} else {
-			if _, ok := visitedBackward.Load(node.Value); !ok {
-				visitedBackward.Store(node.Value, node)
-				ProcessNodeBi(node.Value, chanOutBackward)
-			}
-		}
-	}
-}
-
-// / ! ============== Profiler =============== ! ///
-// trackGoroutines is a function that tracks the number of goroutines, the number of articles processed, and the maximum number of goroutines.
-func trackGoroutines() {
-	start := time.Now()
-	for {
-		time.Sleep(time.Second * 5) // update every 2 seconds
-		fmt.Println(" ======================== ")
-		fmt.Println("Article per sec : ", scraper.NumOfArticlesProcessed/int(time.Since(start).Seconds()))
-		fmt.Println("Number of articles processed: ", scraper.NumOfArticlesProcessed)
-		fmt.Printf("Number of goroutines: %d\n", runtime.NumGoroutine())
-		fmt.Println("Max number of goroutines: ", maxGoRoutines)
-		fmt.Println(" Path Result: ", pathResult.Size())
-	}
 }

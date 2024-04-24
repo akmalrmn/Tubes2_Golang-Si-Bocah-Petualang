@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 var (
@@ -58,6 +59,16 @@ type Node struct {
 	Depth    int
 	Parent   *Node
 	Children []*Node
+	Mutex    sync.Mutex
+}
+
+func (n *Node) AddChild(child *Node) {
+	n.Mutex.Lock()
+	defer n.Mutex.Unlock()
+
+	child.Parent = n
+	child.Depth = n.Depth + 1
+	n.Children = append(n.Children, child)
 }
 
 // NewNode creates a new node with the given value
@@ -94,13 +105,6 @@ func NewNode(value string) *Node {
 		Parent:   nil,
 		Children: []*Node{},
 	}
-}
-
-// AddChild adds a child node to the current node
-func (n *Node) AddChild(child *Node) {
-	child.Parent = n
-	child.Depth = n.Depth + 1
-	n.Children = append(n.Children, child)
 }
 
 // PrintTree prints the tree starting from the current node

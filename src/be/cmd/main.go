@@ -2,8 +2,6 @@ package main
 
 import (
 	"be/pkg/algorithms/bfs"
-	"be/pkg/scraper"
-	"be/pkg/tree"
 	"fmt"
 	"log"
 	"net/http"
@@ -37,12 +35,6 @@ func main() {
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT)
-
-	go func() {
-		<-sigs
-		tree.Analyze(*bfs.TreeRoot)
-		os.Exit(0)
-	}()
 
 	//Create a new HTTP server
 	var handler http.Handler = http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
@@ -89,17 +81,12 @@ func main() {
 		}
 	}()
 
-	// Start the timer
-	scraper.Init()
-
 	// Call the BreadthFirstSearch function
 	start := time.Now()
-	result := bfs.GetPathResult("/wiki/Joko_Widodo", "/wiki/Sleman_Regency")
+	bfs.BFS("/wiki/Joko_Widodo", "/wiki/Sleman_Regency")
 	elapsed := time.Since(start)
+	fmt.Printf("BFS took %s\n", elapsed)
 
-	printsliceString(result)
-	fmt.Println("Total article checked: ", scraper.NumOfArticlesProcessed)
-	fmt.Printf("Execution time: %d minute %d seconds %d miliseconds \n", int(elapsed.Minutes()), int(elapsed.Seconds())%60, (elapsed.Milliseconds())%1000)
 }
 
 func printsliceString(s [][]string) {
