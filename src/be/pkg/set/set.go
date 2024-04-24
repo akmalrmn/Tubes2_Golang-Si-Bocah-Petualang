@@ -5,16 +5,16 @@ import (
 	"sync"
 )
 
-type mapString struct {
+type MapString struct {
 	set map[string]bool
 	mu  sync.Mutex
 }
 
-func NewSetOfSlice() *mapString {
-	return &mapString{set: make(map[string]bool)}
+func NewSetOfSlice() *MapString {
+	return &MapString{set: make(map[string]bool)}
 }
 
-func (s *mapString) Add(slice []string) {
+func (s *MapString) Add(slice []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -22,17 +22,17 @@ func (s *mapString) Add(slice []string) {
 	s.set[key] = true
 }
 
-func (s *mapString) Contains(slice []string) bool {
+func (s *MapString) Contains(slice []string) bool {
 	key := strings.Join(slice, "|")
 	_, exists := s.set[key]
 	return exists
 }
 
-func (s *mapString) Size() int {
+func (s *MapString) Size() int {
 	return len(s.set)
 }
 
-func (s *mapString) ToSlice() [][]string {
+func (s *MapString) ToSlice() [][]string {
 	result := make([][]string, 0, len(s.set))
 	for key := range s.set {
 		result = append(result, strings.Split(key, "|"))

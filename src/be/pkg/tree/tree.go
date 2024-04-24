@@ -14,7 +14,7 @@ var (
 	graph       = gographviz.NewGraph()
 )
 
-func Analyze(root Node) {
+func Analyze(root *Node) {
 	err := gographviz.Analyse(graphAst, graph)
 	if err != nil {
 		fmt.Println(err)
