@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/gocolly/colly"
 	"github.com/gocolly/colly/queue"
-	"net/url"
 	"sync"
 )
 
@@ -48,65 +47,55 @@ func (s *Scraper) BFSScrape(starts, ends string, con *config.Config) []string {
 	// Create a new Collector
 	scrape := NewScraper()
 	scrape.SetScrapper(con)
+	s.colly = scrape.colly
 
 	// Add the start URL to the queue
-	scrape.queue.AddURL(starts)
+	s.queue.AddURL(starts)
 
-	visited := sync.Map{}
-
-	// Make colly request
-	req := &colly.Request{URL: &url.URL{Path: starts}}
+	visited := &sync.Map{}
 
 	// Process the queue
-
-	found , OutQueue := scrape.processQueue(req, visited, ends)
-
-	for !found {
-		// Get the next URL from the queue
-		s.queue = OutQueue
+	for {
 		// Process the queue
-		found , OutQueue = scrape.processQueue(req, visited, ends)
+		done, q := s.processQueue(visited, ends)
+		s.queue = q
+		if done {
+			break
+		}
 	}
-
-	// Return the path
-	return []string{}
-}
-func (s *Scraper) processQueue(node *colly.Request, visited sync.Map, ends shu
-tring) (bool, *queue.Queue) {
-	// Mark the URL as visited
-	fmt.Println("Visiting", node.URL.String())
-	visited.Store(node.URL.String(), true)
-
-	// Find the links on the page
-	s.colly.OnHTML("a[href]", func(e *colly.HTMLElement) {
-		link := e.Attr("href")
-		if link == ends {
-			// Found the end URL
-			// Print the path
-			visited.Range(func(key, value interface{}) bool {
-				println(key.(string))
-			})
-			return true , _
-		}
-		// Check if the link is already visited
-		if _, ok := visited.Load(link); !ok {
-			// Add the link to the queue
-			nextURL, err := url.Parse(e.Request.AbsoluteURL(link))
-			if err != nil {
-				// handle error
-				fmt.Println("Invalid URL:", err)
-				return
-			}
-			nextRequest := &colly.Request{URL: nextURL}
-			s.processQueue(nextRequest, visited, ends)
-		}
+	// Convert the visited sync.Map to a slice of strings
+	var urls []string
+	visited.Range(func(key, value interface{}) bool {
+		urls = append(urls, key.(string))
+		return true
 	})
 
-	// Visit the URL
-	s.colly.Visit(node.URL.String())
+	return urls
+}
 
-	// Wait for the request to finish
+func (s *Scraper) processQueue(visited *sync.Map, ends string) (bool, *queue.Queue) {
+
+	s.colly.OnRequest(func(r *colly.Request) {
+		fmt.Println("Visiting", r.URL)
+	})
+
+	// Process the queue
+	s.colly.OnHTML("a[href]", func(e *colly.HTMLElement) {
+		link := e.Request.AbsoluteURL(e.Attr("href"))
+		// Add the URL to the queue
+		s.queue.AddURL(link)
+		// Add the URL to the visited list
+		visited.Store(link, struct{}{})
+	})
+
+	s.queue.Run(s.colly)
 	s.colly.Wait()
 
+	// Check if the target URL is found
+	if _, ok := visited.Load(ends); ok {
+		return true, s.queue
+	}
+
 	return false, s.queue
+
 }
