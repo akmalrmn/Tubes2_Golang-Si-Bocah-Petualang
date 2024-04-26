@@ -1,202 +1,112 @@
 package scraper
 
 import (
+	"be/pkg/config"
 	"fmt"
-	"github.com/hashicorp/golang-lru"
-	"github.com/temoto/robotstxt"
-	"golang.org/x/net/html"
-	"io"
-	"net"
-	"net/http"
-	"strings"
-	"time"
+	"github.com/gocolly/colly"
+	"github.com/gocolly/colly/queue"
+	"net/url"
+	"sync"
 )
 
-var (
-	httpClient             *http.Client
-	LinkCache, _           = lru.New(1000)
-	ua                     *robotstxt.Group
-	NumOfArticlesProcessed int
-)
+// Scrape Make new interface for Scraper
+type Scrape interface {
+	BFSScrape(starts, ends string, con config.Config) []string
+}
 
-// Init inisialisasi HTTP client dan robots.txt
-func Init() {
-	httpClient = createCustomHTTPClient()
-	resp, err := httpClient.Get("https://en.wikipedia.org/robots.txt")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			fmt.Println(err)
-		}
-	}(resp.Body)
+// Scraper Create a struct for Scraper
+type Scraper struct {
+	colly *colly.Collector
+	queue *queue.Queue
+}
 
-	data, err := robotstxt.FromResponse(resp)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	ua = data.FindGroup("*")
-	if ua == nil {
-		fmt.Println("No group found for user agent")
-		return
+// NewScraper Create a new Scraper
+func NewScraper() *Scraper {
+	q, _ := queue.New(2, &queue.InMemoryQueueStorage{MaxSize: 10000}) // handle the error
+	return &Scraper{
+		colly: colly.NewCollector(),
+		queue: q,
 	}
 }
 
-// createCustomHTTPClient membuat HTTP client dengan konfigurasi khusus
-func createCustomHTTPClient() *http.Client {
-	transport := &http.Transport{
-		MaxIdleConns:       300,
-		IdleConnTimeout:    10 * time.Second,
-		DisableCompression: true,
-		DialContext: (&net.Dialer{
-			Timeout:   10 * time.Second,
-			KeepAlive: 10 * time.Second,
-		}).DialContext,
-	}
+func (s *Scraper) SetScrapper(config *config.Config) {
+	s.colly = colly.NewCollector(
+		colly.Async(config.IsAsync),
+		colly.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"),
+		colly.MaxDepth(config.MaxDepth),
+		colly.AllowedDomains(config.AllowedDomains...),
+	)
 
-	return &http.Client{
-		Transport: transport,
-	}
+	s.colly.Limit(&colly.LimitRule{
+		DomainGlob:  "*",
+		Parallelism: config.MaxParallelism,
+	})
 }
 
-// ExtractLinks mengambil semua link dari halaman web Wikipedia
-func ExtractLinks(url string) ([]string, error) {
+// BFSScrape Scrape the URL using BFS method
+func (s *Scraper) BFSScrape(starts, ends string, con *config.Config) []string {
+	// Create a new Collector
+	scrape := NewScraper()
+	scrape.SetScrapper(con)
 
-	if !ua.Test(url) {
-		return nil, fmt.Errorf("URL is not allowed by robots.txt")
+	// Add the start URL to the queue
+	scrape.queue.AddURL(starts)
+
+	visited := sync.Map{}
+
+	// Make colly request
+	req := &colly.Request{URL: &url.URL{Path: starts}}
+
+	// Process the queue
+
+	found , OutQueue := scrape.processQueue(req, visited, ends)
+
+	for !found {
+		// Get the next URL from the queue
+		s.queue = OutQueue
+		// Process the queue
+		found , OutQueue = scrape.processQueue(req, visited, ends)
 	}
 
-	if links, ok := LinkCache.Get(url); ok {
-		return links.([]string), nil
-	} // Check the cache before making an HTTP request
+	// Return the path
+	return []string{}
+}
+func (s *Scraper) processQueue(node *colly.Request, visited sync.Map, ends shu
+tring) (bool, *queue.Queue) {
+	// Mark the URL as visited
+	fmt.Println("Visiting", node.URL.String())
+	visited.Store(node.URL.String(), true)
 
-	resp, err := httpClient.Get(url)
-	NumOfArticlesProcessed++
-	if err != nil {
-		return nil, err
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			fmt.Println(err)
+	// Find the links on the page
+	s.colly.OnHTML("a[href]", func(e *colly.HTMLElement) {
+		link := e.Attr("href")
+		if link == ends {
+			// Found the end URL
+			// Print the path
+			visited.Range(func(key, value interface{}) bool {
+				println(key.(string))
+			})
+			return true , _
 		}
-	}(resp.Body)
-
-	var links []string
-	z := html.NewTokenizer(resp.Body)
-	for {
-		tt := z.Next()
-		switch tt {
-		case html.ErrorToken:
-			LinkCache.Add(url, links)
-			return links, nil
-		case html.StartTagToken, html.SelfClosingTagToken:
-			t := z.Token()
-			if t.Data == "a" {
-				for _, a := range t.Attr {
-					if a.Key == "href" {
-						trimmed := strings.Trim(a.Val, "\n")
-						if !strings.HasPrefix(trimmed, "#") && strings.HasPrefix(trimmed, "/wiki/") && !strings.Contains(trimmed, ":") && !strings.Contains(trimmed, "Main_Page") && !strings.Contains(trimmed, "#") {
-							links = append(links, trimmed)
-						}
-					}
-				}
+		// Check if the link is already visited
+		if _, ok := visited.Load(link); !ok {
+			// Add the link to the queue
+			nextURL, err := url.Parse(e.Request.AbsoluteURL(link))
+			if err != nil {
+				// handle error
+				fmt.Println("Invalid URL:", err)
+				return
 			}
-		default:
-			continue
+			nextRequest := &colly.Request{URL: nextURL}
+			s.processQueue(nextRequest, visited, ends)
 		}
-	}
-}
+	})
 
-// ExtractLinksNonAdd mengambil semua link dari halaman web Wikipedia tanpa menambahkan counter artikel yang telah di proses
-func ExtractLinksNonAdd(url string) ([]string, error) {
-	if links, ok := LinkCache.Get(url); ok {
-		return links.([]string), nil
-	}
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Println("Error: ", err)
-		return nil, err
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			fmt.Println(err)
-		}
-	}(resp.Body)
+	// Visit the URL
+	s.colly.Visit(node.URL.String())
 
-	var links []string
-	z := html.NewTokenizer(resp.Body)
-	for {
-		tt := z.Next()
-		switch tt {
-		case html.ErrorToken:
-			LinkCache.Add(url, links)
-			return links, nil
-		case html.StartTagToken, html.SelfClosingTagToken:
-			t := z.Token()
-			if t.Data == "a" {
-				for _, a := range t.Attr {
-					if a.Key == "href" {
-						trimmed := strings.Trim(a.Val, "\n")
-						if !strings.HasPrefix(trimmed, "#") && strings.HasPrefix(trimmed, "/wiki/") && !strings.Contains(trimmed, ":") && !strings.Contains(trimmed, "Main_Page") && !strings.Contains(trimmed, "#") {
-							links = append(links, trimmed)
-						}
-					}
-				}
-			}
-		default:
-			continue
-		}
-	}
-}
+	// Wait for the request to finish
+	s.colly.Wait()
 
-// ExtractLinksAsync mengambil semua link dari halaman web Wikipedia secara asynchronous
-func ExtractLinksAsync(url string) ([]string, error) {
-
-	// Check the cache before making an HTTP request
-	if links, ok := LinkCache.Get(url); ok {
-		return links.([]string), nil
-	}
-
-	result := make(chan []string, 1)
-	errResult := make(chan error, 1)
-
-	go func() {
-		defer close(result)
-		defer close(errResult)
-		links, err := ExtractLinks(url)
-		if err != nil {
-			result <- nil
-			errResult <- err
-			return
-		}
-		// Store the links in the cache
-		LinkCache.Add(url, links)
-		result <- links
-	}()
-
-	select {
-	case links := <-result:
-		return links, nil
-	case err := <-errResult:
-		return nil, err
-	}
-}
-
-func linkToTitle(link string) string {
-	link = strings.TrimPrefix(link, "/wiki/")
-	parts := strings.Split(link, "/")
-	replaced := strings.Replace(parts[len(parts)-1], "_", " ", -1)
-	return replaced
-}
-
-func titleToLink(title string) string {
-	replaced := strings.Replace(title, " ", "_", -1)
-	return "/wiki/" + replaced
+	return false, s.queue
 }

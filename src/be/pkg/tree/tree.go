@@ -21,7 +21,7 @@ func Analyze(root *Node) {
 		return
 	}
 
-	traverse(&root, graph)
+	traverse(root, graph)
 	err = os.WriteFile("graph.dot", []byte(graph.String()), 0644)
 	if err != nil {
 		fmt.Println(err)
