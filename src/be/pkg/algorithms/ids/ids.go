@@ -20,6 +20,8 @@ type Result struct {
 func IterativeDeepeningSearch(start, ends string) *Result{
     start = "https://en.wikipedia.org/" + start
     ends = "https://en.wikipedia.org/" + ends
+	targetUrl := ends
+
 	c := colly.NewCollector(
     colly.Async(true),
     )
@@ -32,26 +34,21 @@ func IterativeDeepeningSearch(start, ends string) *Result{
 
 	// The maximum depth for the IDS
 	maxDepth := 6
-
-	var result Result
-
-	// Create a map to store the depth of each URL
 	depths := make(map[string]int)
-
 	// Mutex to protect the depths map
 	var depthsMutex sync.RWMutex
-
-	targetUrl := ends
-
-	// Variable to store the least depth at which the target URL was found
-	leastDepth := maxDepth + 1
-
 	// WaitGroup to wait for all URLs to be visited
 	var wg sync.WaitGroup
 
+    // Variable to store the least depth at which the target URL was found
+	leastDepth := maxDepth + 1
+	var result Result
 	// Counter for the number of links visited
 	var linksVisited int
+
+    // Map to store the parent of each URL
 	parents := make(map[string]string)
+
 	// Start the timer
 	startTime := time.Now()
 	ticker := time.NewTicker(10 * time.Second)
@@ -61,8 +58,9 @@ func IterativeDeepeningSearch(start, ends string) *Result{
 					fmt.Println("Number of links visited:", linksVisited)
 					fmt.Println("Time taken:", time.Since(startTime))
 			}
-	}()
+	    }()
 
+    // On every a element which has href attribute call callback
 	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
 		link := e.Attr("href")
 		if isValidLink(link) {
@@ -86,27 +84,27 @@ func IterativeDeepeningSearch(start, ends string) *Result{
 						fmt.Println(url)
 						fmt.Println("\nFound target URL at depth", leastDepth)
 						fmt.Println("Time taken:", time.Since(startTime))
-            fmt.Println("Number of links visited:", linksVisited)
-						path := []string{url}
-                for url != start {
-                    url = parents[url]
-                    path = append([]string{url}, path...)
-                }
-                fmt.Println("Path:", strings.Join(path, " -> "))
-								result.Path = path
-								result.TimeTaken = time.Since(startTime)
-								result.LinksVisited = linksVisited
-						os.Exit(0)
+                        fmt.Println("Number of links visited:", linksVisited)
+                        path := []string{url}
+                        for url != start {
+                            url = parents[url]
+                            path = append([]string{url}, path...)
+                        }
+                        fmt.Println("Path:", strings.Join(path, " -> "))
+                        result.Path = path
+                        result.TimeTaken = time.Since(startTime)
+                        result.LinksVisited = linksVisited
+                        os.Exit(0)
 					}
 					wg.Add(1)
-        go func() {
-					defer wg.Done()
-            err := c.Visit(url)
-            if err != nil {
-							log.Println("Error visiting URL:", url, "Error:", err)
-					} 
-        }()
-        linksVisited++
+                    go func() {
+                        defer wg.Done()
+                        err := c.Visit(url)
+                        if err != nil {
+                            log.Println("Error visiting URL:", url, "Error:", err)
+                        } 
+                    }()
+                    linksVisited++
 				} else {
 					depthsMutex.Unlock()
 				}
@@ -126,28 +124,10 @@ func IterativeDeepeningSearch(start, ends string) *Result{
     }()
 
 	// Wait for all URLs to be visited
-wg.Wait()
-c.Wait()
-				log.Println("adadadadaadad")
-	// Print the least depth at which the target URL was found
-	if leastDepth > maxDepth {
-    fmt.Println("The target URL was not found within the maximum depth")
-    fmt.Println("Number of links visited:", linksVisited)
-    fmt.Println("Time taken:", time.Since(startTime))
-    os.Exit(1)  // Exit with a status indicating the target was not found
-} else {
-    fmt.Println("The least depth at which the target URL was found is", leastDepth)
-    fmt.Println("Number of links visited:", linksVisited)
-    fmt.Println("Time taken:", time.Since(startTime))
-    os.Exit(0)  // Exit successfully as the target URL was found
-}
-
-	// Print the number of links visited and the time taken
-	fmt.Println("Number of links visited:", linksVisited)
-	fmt.Println("Time taken:", time.Since(startTime))
+    wg.Wait()
+    c.Wait()
 
     return &result
-
 }
 
 func isValidLink(link string) bool {
