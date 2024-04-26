@@ -24,6 +24,24 @@ export interface resultData {
   graph: GraphData;
 }
 
+const dummyGraph: GraphData = {
+  nodes: [
+    { id: 1, title: "Node 1" },
+    { id: 2, title: "Node 2" },
+    { id: 3, title: "Node 3" },
+    { id: 4, title: "Node 4" },
+    { id: 5, title: "Node 5" },
+  ],
+  links: [
+    { source: 1, target: 2 },
+    { source: 1, target: 3 },
+    { source: 1, target: 4 },
+    { source: 4, target: 5 },
+    { source: 2, target: 5 },
+    { source: 3, target: 5 },
+  ],
+};
+
 async function fetchPath(
   start: string | null,
   target: string | null,

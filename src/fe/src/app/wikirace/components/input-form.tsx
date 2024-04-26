@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SubmitHandler, UseFormSetValue, useForm } from "react-hook-form";
 import TurnArrow from "../../../components/icons/arrow-left-right";
@@ -17,8 +17,6 @@ interface Inputs {
 export default function InputForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const inputTarget = useRef<HTMLInputElement>(null);
-  const inputStart = useRef<HTMLInputElement>(null);
 
   const { register, handleSubmit, setValue, getValues } = useForm<Inputs>({
     defaultValues: {

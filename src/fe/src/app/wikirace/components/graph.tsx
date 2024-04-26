@@ -27,7 +27,7 @@ const MyChart = ({ dataset }: { dataset: GraphData }) => {
         d3
           .forceLink(dataset.links)
           .id((d: any) => d.id)
-          .distance(100)
+          .distance(150)
       )
       .force("charge", d3.forceManyBody())
       .force("center", d3.forceCenter(width / 2, height / 2));
@@ -66,8 +66,8 @@ const MyChart = ({ dataset }: { dataset: GraphData }) => {
         return 20;
       })
       .style("fill", (d: Node) => {
-        if (d.id === 1) return "blue";
-        if (d.id === dataset.nodes.length) return "green";
+        if (d.id === 1) return "#f05c5c";
+        if (d.id === dataset.nodes.length) return "#6fa8dc";
         return "black";
       })
       .call(
