@@ -2,100 +2,127 @@ package scraper
 
 import (
 	"be/pkg/config"
-	"fmt"
+	"be/pkg/set"
 	"github.com/gocolly/colly"
 	"github.com/gocolly/colly/queue"
+	"log"
+	"strings"
 	"sync"
 )
 
-// Scrape Make new interface for Scraper
-type Scrape interface {
-	BFSScrape(starts, ends string, con config.Config) []string
-}
+var (
+	ArticleCount int = 0
+)
 
-// Scraper Create a struct for Scraper
-type Scraper struct {
-	colly *colly.Collector
-	queue *queue.Queue
-}
+func QueueColly(input, output *queue.Queue, start, ends string, con *config.Config, parents *sync.Map) *set.MapString {
 
-// NewScraper Create a new Scraper
-func NewScraper() *Scraper {
-	q, _ := queue.New(2, &queue.InMemoryQueueStorage{MaxSize: 10000}) // handle the error
-	return &Scraper{
-		colly: colly.NewCollector(),
-		queue: q,
-	}
-}
+	var results = set.NewSetOfSlice()
 
-func (s *Scraper) SetScrapper(config *config.Config) {
-	s.colly = colly.NewCollector(
-		colly.Async(config.IsAsync),
-		colly.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"),
-		colly.MaxDepth(config.MaxDepth),
-		colly.AllowedDomains(config.AllowedDomains...),
+	// Instantiate default collector
+	c := colly.NewCollector(
+		colly.Async(con.IsAsync),
+		colly.MaxDepth(con.MaxDepth),
+		colly.UserAgent("Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_4_1) AppleWebKit/536.25 (KHTML, like Gecko) Chrome/51.0.2823.231 Safari/537"),
+		colly.CacheDir(con.CacheDir),
+		colly.AllowedDomains(con.AllowedDomains...),
 	)
 
-	s.colly.Limit(&colly.LimitRule{
+	err := c.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
-		Parallelism: config.MaxParallelism,
+		Parallelism: con.MaxParallelism,
+		RandomDelay: con.RandomDelay,
 	})
+
+	if err != nil {
+		log.Println("Error setting the limit rule:", err)
+		return results
+	}
+
+	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
+		link := e.Attr("href")
+		url := e.Request.AbsoluteURL(link)
+
+		if isValidLink(link) {
+			// Check if link is visited
+			_, visited := parents.Load(url)
+			if visited {
+				return
+			}
+
+			parentUrl := e.Request.URL.String()
+			if url == parentUrl {
+				return
+			}
+			parents.Store(url, parentUrl)
+
+			// Add link to the second queue
+			err := output.AddURL(url)
+			if err != nil {
+				log.Println("Error adding URL to queue:", err)
+			}
+
+		}
+
+		// Check if the link is the destination
+		if link == ends {
+
+			path := []string{url}
+			startFullPath := "https://en.wikipedia.org" + start
+
+			for url != startFullPath {
+
+				urlInterface, ok := parents.Load(url)
+				if !ok {
+					log.Println("Error: Link not found in parents map", url)
+					return
+				}
+				url, ok = urlInterface.(string)
+				if !ok {
+					log.Println("Error: links is not a string")
+					return
+				}
+				path = append([]string{url}, path...)
+			}
+
+			log.Println("Path:", strings.Join(path, " -> "))
+			results.Add(path)
+
+			return
+		}
+	})
+
+	c.OnRequest(func(r *colly.Request) {
+		ArticleCount++
+	})
+
+	// Consume URLs in the first queue
+	err = input.Run(c)
+	if err != nil {
+		log.Println("Error running the collector:", err)
+		return results
+	}
+
+	c.Wait()
+
+	return results
 }
 
-// BFSScrape Scrape the URL using BFS method
-func (s *Scraper) BFSScrape(starts, ends string, con *config.Config) []string {
-	// Create a new Collector
-	scrape := NewScraper()
-	scrape.SetScrapper(con)
-	s.colly = scrape.colly
-
-	// Add the start URL to the queue
-	s.queue.AddURL(starts)
-
-	visited := &sync.Map{}
-
-	// Process the queue
-	for {
-		// Process the queue
-		done, q := s.processQueue(visited, ends)
-		s.queue = q
-		if done {
-			break
+func isValidLink(link string) bool {
+	prefixes := []string{
+		"/wiki/Main_Page",
+		"/wiki/File",
+		"/wiki/Special",
+		"/wiki/Wikipedia",
+		"/wiki/Help",
+		"/wiki/Portal",
+		"/wiki/Template",
+		"/wiki/Category",
+		"/wiki/Talk",
+	}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(link, prefix) {
+			return false
 		}
 	}
-	// Convert the visited sync.Map to a slice of strings
-	var urls []string
-	visited.Range(func(key, value interface{}) bool {
-		urls = append(urls, key.(string))
-		return true
-	})
-
-	return urls
-}
-
-func (s *Scraper) processQueue(visited *sync.Map, ends string) (bool, *queue.Queue) {
-
-	s.colly.OnRequest(func(r *colly.Request) {
-		fmt.Println("Visiting", r.URL)
-	})
-
-	// Process the queue
-	s.colly.OnHTML("a[href]", func(e *colly.HTMLElement) {
-		link := e.Request.AbsoluteURL(e.Attr("href"))
-		// Add the URL to the queue
-		s.queue.AddURL(link)
-		// Add the URL to the visited list
-		visited.Store(link, struct{}{})
-	})
-
-	s.queue.Run(s.colly)
-	s.colly.Wait()
-
-	// Check if the target URL is found
-	if _, ok := visited.Load(ends); ok {
-		return true, s.queue
-	}
-
-	return false, s.queue
-
+	return strings.HasPrefix(link, "/wiki/")
 }

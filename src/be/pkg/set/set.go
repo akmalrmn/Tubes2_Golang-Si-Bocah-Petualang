@@ -32,6 +32,17 @@ func (s *MapString) Size() int {
 	return len(s.set)
 }
 
+func (s *MapString) Union(other *MapString) *MapString {
+	result := NewSetOfSlice()
+	for key := range s.set {
+		result.Add(strings.Split(key, "|"))
+	}
+	for key := range other.set {
+		result.Add(strings.Split(key, "|"))
+	}
+	return result
+}
+
 func (s *MapString) ToSlice() [][]string {
 	result := make([][]string, 0, len(s.set))
 	for key := range s.set {

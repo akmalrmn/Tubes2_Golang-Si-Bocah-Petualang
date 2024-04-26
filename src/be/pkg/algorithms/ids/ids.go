@@ -2,29 +2,29 @@ package ids
 
 import (
 	"fmt"
+	"github.com/gocolly/colly"
+	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
-	"log"
-	"os"
-	"github.com/gocolly/colly"
 )
 
 type Result struct {
-	Path          []string
-	Degrees       int
-	TimeTaken     time.Duration
-	LinksVisited  int
+	Path         []string
+	Degrees      int
+	TimeTaken    time.Duration
+	LinksVisited int
 }
 
-func IterativeDeepeningSearch(start, ends string) *Result{
-    start = "https://en.wikipedia.org/" + start
-    ends = "https://en.wikipedia.org/" + ends
+func IterativeDeepeningSearch(start, ends string) *Result {
+	start = "https://en.wikipedia.org/" + start
+	ends = "https://en.wikipedia.org/" + ends
 	targetUrl := ends
 
 	c := colly.NewCollector(
-    colly.Async(true),
-    )
+		colly.Async(true),
+	)
 
 	c.Limit(&colly.LimitRule{
 		DomainGlob:  "*wikipedia.*",
@@ -40,27 +40,27 @@ func IterativeDeepeningSearch(start, ends string) *Result{
 	// WaitGroup to wait for all URLs to be visited
 	var wg sync.WaitGroup
 
-    // Variable to store the least depth at which the target URL was found
+	// Variable to store the least depth at which the target URL was found
 	leastDepth := maxDepth + 1
 	var result Result
 	// Counter for the number of links visited
 	var linksVisited int
 
-    // Map to store the parent of each URL
+	// Map to store the parent of each URL
 	parents := make(map[string]string)
 
 	// Start the timer
 	startTime := time.Now()
 	ticker := time.NewTicker(10 * time.Second)
-    defer ticker.Stop()
-		go func() {
-			for range ticker.C {
-					fmt.Println("Number of links visited:", linksVisited)
-					fmt.Println("Time taken:", time.Since(startTime))
-			}
-	    }()
+	defer ticker.Stop()
+	go func() {
+		for range ticker.C {
+			fmt.Println("Number of links visited:", linksVisited)
+			fmt.Println("Time taken:", time.Since(startTime))
+		}
+	}()
 
-    // On every a element which has href attribute call callback
+	// On every a element which has href attribute call callback
 	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
 		link := e.Attr("href")
 		if isValidLink(link) {
@@ -84,27 +84,27 @@ func IterativeDeepeningSearch(start, ends string) *Result{
 						fmt.Println(url)
 						fmt.Println("\nFound target URL at depth", leastDepth)
 						fmt.Println("Time taken:", time.Since(startTime))
-                        fmt.Println("Number of links visited:", linksVisited)
-                        path := []string{url}
-                        for url != start {
-                            url = parents[url]
-                            path = append([]string{url}, path...)
-                        }
-                        fmt.Println("Path:", strings.Join(path, " -> "))
-                        result.Path = path
-                        result.TimeTaken = time.Since(startTime)
-                        result.LinksVisited = linksVisited
-                        os.Exit(0)
+						fmt.Println("Number of links visited:", linksVisited)
+						path := []string{url}
+						for url != start {
+							url = parents[url]
+							path = append([]string{url}, path...)
+						}
+						fmt.Println("Path:", strings.Join(path, " -> "))
+						result.Path = path
+						result.TimeTaken = time.Since(startTime)
+						result.LinksVisited = linksVisited
+						os.Exit(0)
 					}
 					wg.Add(1)
-                    go func() {
-                        defer wg.Done()
-                        err := c.Visit(url)
-                        if err != nil {
-                            log.Println("Error visiting URL:", url, "Error:", err)
-                        } 
-                    }()
-                    linksVisited++
+					go func() {
+						defer wg.Done()
+						err := c.Visit(url)
+						if err != nil {
+							log.Println("Error visiting URL:", url, "Error:", err)
+						}
+					}()
+					linksVisited++
 				} else {
 					depthsMutex.Unlock()
 				}
@@ -117,17 +117,21 @@ func IterativeDeepeningSearch(start, ends string) *Result{
 	depths[start] = 0
 	depthsMutex.Unlock()
 	wg.Add(1)
-    go func() {
-			defer wg.Done()
-        c.Visit(start)
-        
-    }()
+	go func() {
+		defer wg.Done()
+		err := c.Visit(start)
+		if err != nil {
+			log.Println("Error visiting URL:", start, "Error:", err)
+			return
+		}
+
+	}()
 
 	// Wait for all URLs to be visited
-    wg.Wait()
-    c.Wait()
+	wg.Wait()
+	c.Wait()
 
-    return &result
+	return &result
 }
 
 func isValidLink(link string) bool {
