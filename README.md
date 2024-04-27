@@ -31,5 +31,5 @@ IDS atau Iterative Deepening Search adalah sebuah algoritma pencarian yang meman
 | NIM | Nama | Linkedin |
 | :---: | :---: | :---: |
 | 13522122 | Maulvi Ziadinda Maulana | [LinkedIn](https://www.linkedin.com/in/maulvi-ziadinda-maulana-02b1a5225/) |
+| 13522153 | Muhammad Fauzan Azhim | [LinkedIn](https://www.linkedin.com/in/fauzanazhim/) |
 | 13522161 | Mohamad Akmal Ramadan | [LinkedIn](https://www.linkedin.com/in/akmalrmn/) |
-| 13522153 | Muhammad Fauzan Azhim |  |
