@@ -1,5 +1,4 @@
 # 💎  Pemanfaatan Algoritma IDS dan BFS dalam Permainan WikiRace
-oleh kelompok Golang Si Bocah Petualang
 
 WikiRace atau Wiki Game adalah permainan yang melibatkan Wikipedia, sebuah
  ensiklopedia daring gratis yang dikelola oleh berbagai relawan di dunia, dimana pemain
@@ -28,7 +27,7 @@ BFS atau Breadth-First Search adalah salah satu algoritma yang digunakan dalam  
 ## IDS
 IDS atau Iterative Deepening Search adalah sebuah algoritma pencarian yang memanfaatkan algoritma DLS (Depth Limited Search). IDS mencoba untuk menyelesaikan masalah dengan memperdalam pencarian secara bertahap hingga mencapai solusi. Untuk mengetahui tentang IDS yang perlu diketahui terlebih dahulu apa itu DLS.
 
-## Dibuat oleh
+## Dibuat oleh kelompok Golang Si Bocah Petualang
 | NIM | Nama | Linkedin |
 | :---: | :---: | :---: |
 | 13522122 | Maulvi Ziadinda Maulana | [LinkedIn](https://www.linkedin.com/in/maulvi-ziadinda-maulana-02b1a5225/) |
