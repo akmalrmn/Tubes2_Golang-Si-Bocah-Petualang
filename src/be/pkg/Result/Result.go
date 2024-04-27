@@ -26,8 +26,8 @@ type Graph struct {
 
 type Result struct {
 	Time                int64 `json:"time"`
-	TotalArticleChecked int   `json:"total_article_checked"`
-	TotalArtcleVisit    int   `json:"total_article_visit"`
+	TotalArticleChecked int   `json:"totalArticleChecked"`
+	TotalArtcleVisit    int   `json:"totalArticleVisited"`
 	Traph               Graph `json:"graph"`
 }
 

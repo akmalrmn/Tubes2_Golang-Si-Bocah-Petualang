@@ -50,7 +50,7 @@ func QueueColly(input, output *queue.Queue, start, ends string, con *config.Conf
 		"http://103.59.45.53:8080",
 		"http://36.64.217.27:1313",
 		"http://101.255.166.242:8080",
-		"http://8c5f3b01ca4c7c3cd1c7ee83e4b652f69d6bd21b:@proxy.zenrows.com:8001"
+		"http://8c5f3b01ca4c7c3cd1c7ee83e4b652f69d6bd21b:@proxy.zenrows.com:8001",
 	); err == nil {
 		c.SetProxyFunc(p)
 	}

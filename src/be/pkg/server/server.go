@@ -2,6 +2,7 @@ package server
 
 import (
 	"be/pkg/algorithms/bfs"
+	"be/pkg/algorithms/ids"
 	config2 "be/pkg/config"
 	"fmt"
 	"log"
@@ -44,9 +45,10 @@ func NewHttpHandler() http.Handler {
 			log.Println("BFS")
 			result := bfs.BFS(start, end, config)
 			resp = result
-		} else if req.URL.Path == "/dfs" {
-			// Call the DepthFirstSearch function
-			// TODO implement the DepthFirstSearch function
+		} else if req.URL.Path == "/ids" {
+			log.Println("IDS")
+			result := ids.IterativeDeepeningSearch(start, end)
+			resp = result
 		} else {
 			rw.WriteHeader(http.StatusNotFound)
 			return
