@@ -108,7 +108,10 @@ function Result(
     if (elem) {
       elem.scrollIntoView({ behavior: "smooth" });
     }
-    fetchData();
+
+    if (start && target && algorithm) {
+      fetchData();
+    }
   }, [start, target, algorithm]);
 
   if (!start || !target) {

@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
-
 	"github.com/gocolly/colly/v2"
 )
 
@@ -26,8 +26,6 @@ func (t *contextTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 }
 
 func collectorWithContext(c *colly.Collector, ctx context.Context) {
-	// We can stop all requests at `OnRequest` callback
-	// before sending request to HTTP client.
 	c.OnRequest(func(req *colly.Request) {
 		select {
 		case <-ctx.Done():
@@ -52,10 +50,8 @@ type Result2 struct {
 }
 
 func IterativeDeepeningSearch(start, ends string) []byte {
-
 	start = "https://en.wikipedia.org" + start
 	ends = "https://en.wikipedia.org" + ends
-	log.Println(ends)
 	targetUrl := ends
 
 	c := colly.NewCollector(
@@ -74,7 +70,7 @@ func IterativeDeepeningSearch(start, ends string) []byte {
 		Delay:       100 * time.Millisecond,
 	})
 
-	// The maximum depth for the IDS
+	// Set of paths to the target URL
 	var results = set.NewSetOfSlice()
 	maxDepth := 6
 	depths := make(map[string]int)
@@ -87,11 +83,11 @@ func IterativeDeepeningSearch(start, ends string) []byte {
 	leastDepth := maxDepth + 1
 	var result Result2
 	// Counter for the number of links visited
-	var linksVisited int
-
+	var linksVisited int64
 	// Map to store the parent-child relationship of each URL
 	parents := make(map[string]string)
 
+	// On every response
 	c.OnRequest(func(r *colly.Request) {
 		if result.Degrees != 0 {
 			// Target found, cancel all further requests
@@ -108,10 +104,12 @@ func IterativeDeepeningSearch(start, ends string) []byte {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
+	// Print the number of links visited every 10 seconds
 	go func() {
 		for range ticker.C {
-			fmt.Println("Number of links visited:", linksVisited)
+			fmt.Println("Number of links visited:", atomic.LoadInt64(&linksVisited))
 			fmt.Println("Time taken:", time.Since(startTime))
+			
 			if result.Degrees != 0 {
 				cancel()
 				return
@@ -148,7 +146,7 @@ func IterativeDeepeningSearch(start, ends string) []byte {
 							goroutineResult := Result2{
 								Degrees:      currentDepth + 1,
 								TimeTaken:    time.Since(startTime),
-								LinksVisited: linksVisited,
+								LinksVisited: int(atomic.LoadInt64(&linksVisited)),
 							}
 							fmt.Println(url)
 							fmt.Println("\nFound target URL at depth", leastDepth)
@@ -182,14 +180,11 @@ func IterativeDeepeningSearch(start, ends string) []byte {
 										ctx.Done()
 										return
 									default:
-										err := c.Visit(url)
-										if err != nil {
-											log.Println("Error visiting URL:", url, "Error:", err)
-										}
+										c.Visit(url)
 									}
 								}
 							}()
-							linksVisited++
+							atomic.AddInt64(&linksVisited, 1)
 						}
 					} else {
 						depthsMutex.Unlock()
@@ -212,7 +207,6 @@ func IterativeDeepeningSearch(start, ends string) []byte {
 			return
 		}
 		c.Visit(start)
-		return
 	}()
 
 	// Wait for the target URL to be found or all URLs to be visited
@@ -238,7 +232,7 @@ func IterativeDeepeningSearch(start, ends string) []byte {
 		log.Printf("JSON: %s\n", jsonOutput)
 		return jsonOutput
 
-		// Target URL found, return the result
+	// Target URL found, return the result
 	case <-ctx.Done():
 		// Context canceled, return nil to indicate failure
 		var graph Result.Graph
@@ -262,7 +256,6 @@ func IterativeDeepeningSearch(start, ends string) []byte {
 		log.Printf("JSON: %s\n", jsonOutput)
 		return jsonOutput
 	}
-
 }
 
 func isValidLink(link string) bool {
