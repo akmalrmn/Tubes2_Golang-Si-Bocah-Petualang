@@ -195,7 +195,7 @@ func IterativeDeepeningSearch(start, ends string) *Result {
     // Close the context to ensure all goroutines are stopped
     cancel()
 
-    return &result
+	return &result
 }
 
 func isValidLink(link string) bool {
@@ -217,3 +217,4 @@ func isValidLink(link string) bool {
     }
     return strings.HasPrefix(link, "/wiki")
 }
+
