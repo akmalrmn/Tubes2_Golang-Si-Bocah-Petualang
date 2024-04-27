@@ -42,6 +42,7 @@ func QueueColly(input, output *queue.Queue, start, ends string, con *config.Conf
 	err := c.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
 		Parallelism: con.MaxParallelism,
+		Delay:       con.RandomDelay,
 		RandomDelay: con.RandomDelay,
 	})
 
@@ -72,31 +73,29 @@ func QueueColly(input, output *queue.Queue, start, ends string, con *config.Conf
 			if err != nil {
 				log.Println("Error adding URL to queue:", err)
 			}
-		}
+			if link == ends {
 
-		// Check if the link is the destination
-		if link == ends {
+				path := []string{url}
+				startFullPath := "https://en.wikipedia.org" + start
 
-			path := []string{url}
-			startFullPath := "https://en.wikipedia.org" + start
+				for url != startFullPath {
 
-			for url != startFullPath {
-
-				urlInterface, ok := parents.Load(url)
-				if !ok {
-					log.Println("Error: Link not found in parents map", url)
-					return
+					urlInterface, ok := parents.Load(url)
+					if !ok {
+						log.Println("Error: Link not found in parents map", url)
+						return
+					}
+					url, ok = urlInterface.(string)
+					if !ok {
+						log.Println("Error: links is not a string")
+						return
+					}
+					path = append([]string{url}, path...)
 				}
-				url, ok = urlInterface.(string)
-				if !ok {
-					log.Println("Error: links is not a string")
-					return
-				}
-				path = append([]string{url}, path...)
+
+				results.Add(path)
+				return
 			}
-
-			results.Add(path)
-			return
 		}
 	})
 
