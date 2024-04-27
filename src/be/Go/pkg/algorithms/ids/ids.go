@@ -52,11 +52,12 @@ type Result2 struct {
 func IterativeDeepeningSearch(start, ends string) []byte {
 	start = "https://en.wikipedia.org" + start
 	ends = "https://en.wikipedia.org" + ends
+	log.Println(start)
+	log.Println(ends)
 	targetUrl := ends
 
 	c := colly.NewCollector(
 		colly.Async(true),
-		colly.CacheDir("./cache"),
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -86,8 +87,8 @@ func IterativeDeepeningSearch(start, ends string) []byte {
 	var linksVisited int64
 	// Map to store the parent-child relationship of each URL
 	parents := make(map[string]string)
-
-	// On every response
+	var targetFound bool
+		// On every response
 	c.OnRequest(func(r *colly.Request) {
 		if result.Degrees != 0 {
 			// Target found, cancel all further requests
@@ -165,6 +166,7 @@ func IterativeDeepeningSearch(start, ends string) []byte {
 							goroutineResult.Path = results.ToSlice()
 							// Send the result for this goroutine to the channel
 							resultCh <- &goroutineResult
+							targetFound = true
 							close(done)
 
 							cancel()
@@ -192,6 +194,9 @@ func IterativeDeepeningSearch(start, ends string) []byte {
 				}
 			}
 		}
+        if targetFound {
+            cancel() // Cancel the context if the target is found
+        }
 	})
 
 	// Initialize the depths map with the starting URL
