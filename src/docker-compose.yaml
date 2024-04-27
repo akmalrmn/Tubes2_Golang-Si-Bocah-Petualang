@@ -1,0 +1,15 @@
+version: '3.7'
+
+services:
+  app:
+    build:
+        context: .
+        dockerfile: Dockerfile
+    container_name: Golang-App
+    ports:
+        - "3000:3000"
+    volumes:
+        - .:/app
+        - /app/node_modules
+    environment:
+        - PORT=3000

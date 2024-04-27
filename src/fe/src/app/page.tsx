@@ -20,7 +20,7 @@ export default function Home() {
             Welcome to WikiRace Solver! Utilizing Breadth-First Search (BFS) and
             Iterative Deepening Search (IDS) algorithms, our web app will find
             the shortest path between any two Wikipedia pages. Developed as part
-            of the Algorithm Strategy course's second major assignment, it
+            of the Algorithm Strategy course&apos;s second major assignment, it
             demonstrates our prowess in algorithm implementation and
             optimization.
           </h1>
