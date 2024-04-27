@@ -1,15 +1,25 @@
 version: '3.7'
 
 services:
-  app:
+  backend:
     build:
-        context: .
-        dockerfile: Dockerfile
-    container_name: Golang-App
-    ports:
-        - "3000:3000"
+      context: ./be/Go
+      dockerfile: Dockerfile
     volumes:
-        - .:/app
-        - /app/node_modules
-    environment:
-        - PORT=3000
+      - ./be/Go:/app
+    ports:
+      - "8080:8080"
+    command: go run main.go  # replace with your actual command
+
+  frontend:
+    build:
+      context: ./fe
+      dockerfile: Dockerfile
+    volumes:
+      - ./fe:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    command: npm run start  # replace with your actual command
