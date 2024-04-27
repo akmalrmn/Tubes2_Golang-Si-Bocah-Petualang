@@ -4,14 +4,12 @@ import (
 	"be/pkg/config"
 	"be/pkg/set"
 	"crypto/tls"
+	"github.com/gocolly/colly/v2"
+	"github.com/gocolly/colly/v2/queue"
 	"log"
 	"net/http"
 	"strings"
 	"sync"
-	"time"
-
-	"github.com/gocolly/colly/v2"
-	"github.com/gocolly/colly/v2/queue"
 )
 
 var (
@@ -34,38 +32,24 @@ func QueueColly(input, output *queue.Queue, start, ends string, con *config.Conf
 	})
 
 	// Round-robin Proxy
-	// rp, err := proxy.RoundRobinProxySwitcher(
-	// 	"http://scrapingant&proxy_type=residential&proxy_country=ID&browser=false:cabfe254df5746b4bdc0cdcd762fc034@proxy.scrapingant.com:8080",
-	// 	"http://117.54.114.101:80",
-	// 	"http://58.147.189.222:3128",
-	// 	"http://43.133.136.208:8800",
-	// 	"http://103.105.196.128:80",
-	// 	"http://117.54.114.99:80",
-	// )
-	// if err != nil {
-	// 	log.Println("Error setting the proxy:", err)
-	// }
-	// c.SetProxyFunc(rp)
+	//rp, err := proxy.RoundRobinProxySwitcher(
+	//	"http://scrapingant&proxy_type=residential&proxy_country=ID&browser=false:cabfe254df5746b4bdc0cdcd762fc034@proxy.scrapingant.com:8080",
+	//	"http://117.54.114.101:80",
+	//	"http://58.147.189.222:3128",
+	//	"http://43.133.136.208:8800",
+	//	"http://103.105.196.128:80",
+	//	"http://117.54.114.99:80",
+	//)
+	//if err != nil {
+	//	log.Println("Error setting the proxy:", err)
+	//}
+	//c.SetProxyFunc(rp)
 
 	err := c.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
 		Parallelism: con.MaxParallelism,
 		RandomDelay: con.RandomDelay,
 	})
-
-	go func(){
-		startTime := time.Now()
-		timer := time.NewTimer(5 * time.Second)
-		for {
-			select{
-			case <-timer.C:
-				log.Println("Article Count:", ArticleCount)
-				log.Println("Time taken:", time.Since(startTime))
-				timer.Reset(5 * time.Second)
-
-			}
-		}
-	}()
 
 	if err != nil {
 		log.Println("Error setting the limit rule:", err)
@@ -123,6 +107,10 @@ func QueueColly(input, output *queue.Queue, start, ends string, con *config.Conf
 	})
 
 	c.OnError(func(r *colly.Response, err error) {
+		// IF error is url already visited then ignore
+		if r.StatusCode == 200 {
+			return
+		}
 		log.Println("error:", r.StatusCode, err)
 	})
 
