@@ -3,11 +3,17 @@ package scraper
 import (
 	"be/pkg/config"
 	"be/pkg/set"
-	"github.com/gocolly/colly"
-	"github.com/gocolly/colly/queue"
+	"crypto/tls"
+	"github.com/gocolly/colly/v2"
+	"github.com/gocolly/colly/v2/extensions"
+	"github.com/gocolly/colly/v2/proxy"
+	"github.com/gocolly/colly/v2/queue"
 	"log"
+	"net"
+	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -15,7 +21,6 @@ var (
 )
 
 func QueueColly(input, output *queue.Queue, start, ends string, con *config.Config, parents *sync.Map) *set.MapString {
-
 	var results = set.NewSetOfSlice()
 
 	// Instantiate default collector
@@ -26,6 +31,29 @@ func QueueColly(input, output *queue.Queue, start, ends string, con *config.Conf
 		colly.CacheDir(con.CacheDir),
 		colly.AllowedDomains(con.AllowedDomains...),
 	)
+
+	extensions.RandomUserAgent(c)
+
+	c.WithTransport(&http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second, // Timeout
+			KeepAlive: 30 * time.Second, // keepAlive timeout
+		}).DialContext,
+		MaxIdleConns:          100,              // Maximum number of idle connections
+		IdleConnTimeout:       90 * time.Second, // Idle connection timeout
+		TLSHandshakeTimeout:   10 * time.Second, // TLS handshake timeout
+		ExpectContinueTimeout: 1 * time.Second,
+	})
+
+	if p, err := proxy.RoundRobinProxySwitcher(
+		"http://103.59.45.53:8080",
+		"http://36.64.217.27:1313",
+		"http://101.255.166.242:8080",
+		"http://8c5f3b01ca4c7c3cd1c7ee83e4b652f69d6bd21b:@proxy.zenrows.com:8001"
+	); err == nil {
+		c.SetProxyFunc(p)
+	}
 
 	err := c.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
@@ -56,7 +84,7 @@ func QueueColly(input, output *queue.Queue, start, ends string, con *config.Conf
 			parents.Store(url, parentUrl)
 
 			// Add link to the second queue
-			err := output.AddURL(url)
+			err = output.AddURL(url)
 			if err != nil {
 				log.Println("Error adding URL to queue:", err)
 			}
@@ -84,11 +112,13 @@ func QueueColly(input, output *queue.Queue, start, ends string, con *config.Conf
 				path = append([]string{url}, path...)
 			}
 
-			log.Println("Path:", strings.Join(path, " -> "))
 			results.Add(path)
-
 			return
 		}
+	})
+
+	c.OnError(func(r *colly.Response, err error) {
+		log.Println("error:", r.StatusCode, err)
 	})
 
 	c.OnRequest(func(r *colly.Request) {
@@ -103,7 +133,6 @@ func QueueColly(input, output *queue.Queue, start, ends string, con *config.Conf
 	}
 
 	c.Wait()
-
 	return results
 }
 

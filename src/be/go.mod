@@ -2,14 +2,13 @@ module be
 
 go 1.22.2
 
-require golang.org/x/net v0.24.0 // direct
+require golang.org/x/net v0.24.0 // indirect; direct
 
 require (
 	github.com/awalterschulze/gographviz v2.0.3+incompatible
 	github.com/gocolly/colly v1.2.0
-	github.com/hashicorp/golang-lru v1.0.2
+	github.com/gocolly/colly/v2 v2.1.0
 	github.com/mattn/go-sqlite3 v1.14.22
-	github.com/temoto/robotstxt v1.1.2
 )
 
 require (
@@ -24,6 +23,7 @@ require (
 	github.com/kennygrant/sanitize v1.2.4 // indirect
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
+	github.com/temoto/robotstxt v1.1.2 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect

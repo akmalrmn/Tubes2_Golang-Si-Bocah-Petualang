@@ -1,7 +1,6 @@
 package config
 
 import (
-	"math"
 	"runtime"
 	"time"
 )
@@ -34,8 +33,8 @@ func NewConfigDefault() *Config {
 		MaxQueueSize:   10000,
 		AllowedDomains: []string{"en.wikipedia.org"},
 		CacheDir:       "cache/",
-		MaxParallelism: 16,
-		MaxProcessor:   50000,
+		MaxParallelism: 2,
+		MaxProcessor:   4,
 		MaxThreads:     50000,
 	}
 }
@@ -44,13 +43,13 @@ func NewTurboConfig() *Config {
 	return &Config{
 		IsAsync:        true,
 		AllowCache:     true,
-		MaxDepth:       math.MaxInt32,
-		MaxQueryThread: runtime.NumCPU(),
-		MaxQueueSize:   10000,
+		MaxDepth:       12,
+		MaxQueryThread: runtime.NumCPU() / 2,
+		MaxQueueSize:   1000000,
 		RandomDelay:    100 * time.Millisecond,
 		AllowedDomains: []string{"en.wikipedia.org"},
 		CacheDir:       "cache/",
-		MaxParallelism: 400,
+		MaxParallelism: 12,
 		MaxProcessor:   runtime.NumCPU(),
 		MaxThreads:     50000,
 	}

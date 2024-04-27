@@ -7,7 +7,7 @@ import (
 	"be/pkg/set"
 	"encoding/json"
 	"fmt"
-	"github.com/gocolly/colly/queue"
+	"github.com/gocolly/colly/v2/queue"
 	"log"
 	"sync"
 	"time"
@@ -15,20 +15,26 @@ import (
 
 func BFS(starts, ends string, con *config.Config) []byte {
 
+	scraper.ArticleCount = 0
+
 	starts = "/wiki/" + starts
 	ends = "/wiki/" + ends
+
+	log.Println("BFS Starts")
+	log.Println("Starts:", starts)
+	log.Println("Ends:", ends)
 
 	startTime := time.Now()
 	parents := sync.Map{}
 
 	queueInput, _ := queue.New(
 		con.MaxQueryThread,
-		&queue.InMemoryQueueStorage{MaxSize: 10000},
+		&queue.InMemoryQueueStorage{MaxSize: con.MaxQueueSize},
 	)
 
 	queueOutput, _ := queue.New(
 		con.MaxQueryThread,
-		&queue.InMemoryQueueStorage{MaxSize: 10000},
+		&queue.InMemoryQueueStorage{MaxSize: con.MaxQueueSize},
 	)
 
 	// Add URLs to the first queue
@@ -40,17 +46,33 @@ func BFS(starts, ends string, con *config.Config) []byte {
 
 	var result = set.NewSetOfSlice()
 
+	depth := 0
+
 	for {
+		log.Println("Depth:", depth)
+		depth++
+
+		startTime2 := time.Now()
 		tempResult := scraper.QueueColly(queueInput, queueOutput, starts, ends, con, &parents)
+		log.Println("Time elapsed:", time.Since(startTime2).Milliseconds())
+
 		result = result.Union(tempResult)
+
 		if result.Size() > 0 {
+			log.Println("Found the target")
 			break
+		}
+
+		if depth > con.MaxDepth {
+			log.Println("Max depth reached")
+			break
+
 		} else {
 			log.Println("Article checked", scraper.ArticleCount)
 			queueInput = queueOutput
 			queueOutput, _ = queue.New(
 				con.MaxQueryThread,
-				&queue.InMemoryQueueStorage{MaxSize: 10000},
+				&queue.InMemoryQueueStorage{MaxSize: con.MaxQueueSize},
 			)
 		}
 	}
