@@ -1,62 +1,104 @@
 package bfs
 
 import (
+	"be/pkg/Result"
+	"be/pkg/config"
 	"be/pkg/scraper"
-	"be/pkg/tree"
+	"be/pkg/set"
+	"encoding/json"
 	"fmt"
+	"github.com/gocolly/colly/v2/queue"
+	"log"
+	"sync"
+	"time"
 )
 
-// BreadthFirstSearch melakukan pencarian secara lebar pada tree
-func BreadthFirstSearch(star string, target string) *tree.Node {
-	root := tree.NewNode(star)
+func BFS(starts, ends string, con *config.Config) []byte {
 
-	if root == nil {
-		return nil
+	scraper.ArticleCount = 0
+
+	starts = "/wiki/" + starts
+	ends = "/wiki/" + ends
+
+	log.Println("BFS Starts")
+	log.Println("Starts:", starts)
+	log.Println("Ends:", ends)
+
+	startTime := time.Now()
+	parents := sync.Map{}
+
+	queueInput, _ := queue.New(
+		con.MaxQueryThread,
+		&queue.InMemoryQueueStorage{MaxSize: con.MaxQueueSize},
+	)
+
+	queueOutput, _ := queue.New(
+		con.MaxQueryThread,
+		&queue.InMemoryQueueStorage{MaxSize: con.MaxQueueSize},
+	)
+
+	// Add URLs to the first queue
+	err := queueInput.AddURL("https://en.wikipedia.org" + starts)
+	if err != nil {
+		log.Println("Error adding URL to queue:", err)
+		return []byte(fmt.Sprintf(`{Error adding URL to queue : %v}`, err))
 	}
 
-	// Membuat antrian kosong
-	queue := []*tree.Node{root}
-	var answer *tree.Node
+	var result = set.NewSetOfSlice()
 
-	for len(queue) > 0 {
-		// Mengambil node pertama dari antrian
-		if queue[0].Value == target {
-			answer = queue[0]
+	depth := 0
+
+	for {
+		log.Println("Depth:", depth)
+		depth++
+
+		startTime2 := time.Now()
+		tempResult := scraper.QueueColly(queueInput, queueOutput, starts, ends, con, &parents)
+		log.Println("Time elapsed:", time.Since(startTime2).Milliseconds())
+
+		result = result.Union(tempResult)
+
+		if result.Size() > 0 {
+			log.Println("Found the target")
 			break
 		}
 
-		node := queue[0]
-		queue = queue[1:]
+		if depth > con.MaxDepth {
+			log.Println("Max depth reached")
+			break
 
-		// Menampilkan nilai node
-		// fmt.Println(node.Value)
-
-		links, err := scraper.ExtractLinks("https://en.wikipedia.org" + node.Value)
-
-		if err != nil {
-			fmt.Printf("Terjadi kesalahan: %v", err)
-			return nil
+		} else {
+			log.Println("Article checked", scraper.ArticleCount)
+			queueInput = queueOutput
+			queueOutput, _ = queue.New(
+				con.MaxQueryThread,
+				&queue.InMemoryQueueStorage{MaxSize: con.MaxQueueSize},
+			)
 		}
+	}
+	elapsed := time.Since(startTime).Milliseconds()
 
-		for _, link := range links {
-			child := tree.NewNode(link)
-			node.AddChild(child)
-		}
-
-		// Menambahkan semua anak dari node ke antrian
-		queue = append(queue, node.Children...)
+	log.Println("Result:")
+	for _, v := range result.ToSlice() {
+		log.Println(v)
 	}
 
-	var newTreeNode *tree.Node
+	var graph Result.Graph
+	graph.GenerateGraph(result.ToSlice())
 
-	//Backtracking to get the root node and create a new tree
-	for answer.Parent != nil {
-		newTreeNode = tree.NewNode(answer.Value)
-		newTreeNode.Parent = tree.NewNode(answer.Parent.Value)
-		newTreeNode.Parent.AddChild(newTreeNode)
-		newTreeNode = newTreeNode.Parent
-		answer = answer.Parent
+	outputResult := Result.Result{
+		Traph:               graph,
+		Time:                elapsed,
+		TotalArticleChecked: scraper.ArticleCount,
+		TotalArtcleVisit:    graph.GetNodesCount(),
 	}
 
-	return newTreeNode
+	jsonOutput, err := json.Marshal(outputResult)
+
+	if err != nil {
+		log.Println("Error marshalling JSON:", err)
+		return []byte(fmt.Sprintf(`{Error marshalling JSON : %v}`, err))
+	}
+
+	return jsonOutput
 }
