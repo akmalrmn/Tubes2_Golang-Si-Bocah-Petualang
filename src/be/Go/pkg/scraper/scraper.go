@@ -4,16 +4,14 @@ import (
 	"be/pkg/config"
 	"be/pkg/set"
 	"crypto/tls"
-	"github.com/gocolly/colly/v2"
-	"github.com/gocolly/colly/v2/extensions"
-	"github.com/gocolly/colly/v2/proxy"
-	"github.com/gocolly/colly/v2/queue"
 	"log"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gocolly/colly/v2"
+	"github.com/gocolly/colly/v2/queue"
 )
 
 var (
@@ -27,44 +25,47 @@ func QueueColly(input, output *queue.Queue, start, ends string, con *config.Conf
 	c := colly.NewCollector(
 		colly.Async(con.IsAsync),
 		colly.MaxDepth(con.MaxDepth),
-		colly.UserAgent("Mozilla/5.0 (Windows; U; Windows NT 5.1; zh-TW; rv:1.9.2.4) Gecko/20100611 Firefox/3.6.4 GTB7.0 ( .NET CLR 3.5.30729)"),
 		colly.CacheDir(con.CacheDir),
 		colly.AllowedDomains(con.AllowedDomains...),
 	)
 
-	extensions.RandomUserAgent(c)
-
 	c.WithTransport(&http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second, // Timeout
-			KeepAlive: 30 * time.Second, // keepAlive timeout
-		}).DialContext,
-		IdleConnTimeout:       90 * time.Second, // Idle connection timeout
-		TLSHandshakeTimeout:   10 * time.Second, // TLS handshake timeout
-		ExpectContinueTimeout: 1 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
 	})
 
 	// Round-robin Proxy
-	rp, err := proxy.RoundRobinProxySwitcher(
-		"http://scrapingant&proxy_type=residential&proxy_country=ID&browser=false:cabfe254df5746b4bdc0cdcd762fc034@proxy.scrapingant.com:8080",
-		"http://117.54.114.101:80",
-		"http://58.147.189.222:3128",
-		"http://43.133.136.208:8800",
-		"http://103.105.196.128:80",
-		"http://117.54.114.99:80",
-	)
-	if err != nil {
-		log.Println("Error setting the proxy:", err)
-	}
-	c.SetProxyFunc(rp)
+	// rp, err := proxy.RoundRobinProxySwitcher(
+	// 	"http://scrapingant&proxy_type=residential&proxy_country=ID&browser=false:cabfe254df5746b4bdc0cdcd762fc034@proxy.scrapingant.com:8080",
+	// 	"http://117.54.114.101:80",
+	// 	"http://58.147.189.222:3128",
+	// 	"http://43.133.136.208:8800",
+	// 	"http://103.105.196.128:80",
+	// 	"http://117.54.114.99:80",
+	// )
+	// if err != nil {
+	// 	log.Println("Error setting the proxy:", err)
+	// }
+	// c.SetProxyFunc(rp)
 
-	err = c.Limit(&colly.LimitRule{
+	err := c.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
 		Parallelism: con.MaxParallelism,
 		RandomDelay: con.RandomDelay,
 	})
+
+	go func(){
+		startTime := time.Now()
+		timer := time.NewTimer(5 * time.Second)
+		for {
+			select{
+			case <-timer.C:
+				log.Println("Article Count:", ArticleCount)
+				log.Println("Time taken:", time.Since(startTime))
+				timer.Reset(5 * time.Second)
+
+			}
+		}
+	}()
 
 	if err != nil {
 		log.Println("Error setting the limit rule:", err)
@@ -126,7 +127,6 @@ func QueueColly(input, output *queue.Queue, start, ends string, con *config.Conf
 	})
 
 	c.OnRequest(func(r *colly.Request) {
-		log.Println("Visiting", r.URL.String())
 		ArticleCount++
 	})
 

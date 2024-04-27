@@ -14,6 +14,7 @@ type Config struct {
 	MaxDepth       int
 	MaxQueryThread int
 	MaxQueueSize   int
+	LimitQueue 		 int
 	RandomDelay    time.Duration
 	AllowedDomains []string
 	CacheDir       string
@@ -41,15 +42,16 @@ func NewConfigDefault() *Config {
 
 func NewTurboConfig() *Config {
 	return &Config{
-		IsAsync:        true,
+		IsAsync:        false,
 		AllowCache:     true,
 		MaxDepth:       12,
-		MaxQueryThread: runtime.NumCPU() / 2,
+		MaxQueryThread: runtime.NumCPU()/4,
 		MaxQueueSize:   1000000,
-		RandomDelay:    100 * time.Millisecond,
+		LimitQueue:			20000,
+		RandomDelay:    1000 * time.Millisecond,
 		AllowedDomains: []string{"en.wikipedia.org"},
 		CacheDir:       "cache/",
-		MaxParallelism: 12,
+		MaxParallelism: 1,
 		MaxProcessor:   runtime.NumCPU(),
 		MaxThreads:     50000,
 	}

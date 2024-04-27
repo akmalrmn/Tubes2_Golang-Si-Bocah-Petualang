@@ -6,7 +6,6 @@ require golang.org/x/net v0.24.0 // indirect; direct
 
 require (
 	github.com/awalterschulze/gographviz v2.0.3+incompatible
-	github.com/gocolly/colly v1.2.0
 	github.com/gocolly/colly/v2 v2.1.0
 	github.com/mattn/go-sqlite3 v1.14.22
 )

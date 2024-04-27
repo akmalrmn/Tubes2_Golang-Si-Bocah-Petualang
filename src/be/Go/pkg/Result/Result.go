@@ -26,8 +26,8 @@ type Graph struct {
 
 type Result struct {
 	Time                int64 `json:"time"`
-	TotalArticleChecked int   `json:"total_article_checked"`
-	TotalArtcleVisit    int   `json:"total_article_visit"`
+	TotalArticleChecked int   `json:"totalArticleChecked"`
+	TotalArtcleVisit    int   `json:"totalArticleVisited"`
 	Traph               Graph `json:"graph"`
 }
 
@@ -68,7 +68,7 @@ func (g *Graph) GetNodesCount() int {
 }
 
 func (g *Graph) GenerateNodeBFS(input [][]string) {
-	ArticleCount = 0
+	ArticleCount = 1
 	for i := 0; i < len(input); i++ {
 		for j := 0; j < len(input[i]); j++ {
 			if g.FindNode(input[i][j]) == -1 {

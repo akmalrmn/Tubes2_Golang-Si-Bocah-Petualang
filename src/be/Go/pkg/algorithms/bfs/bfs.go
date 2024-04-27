@@ -7,10 +7,11 @@ import (
 	"be/pkg/set"
 	"encoding/json"
 	"fmt"
-	"github.com/gocolly/colly/v2/queue"
 	"log"
 	"sync"
 	"time"
+
+	"github.com/gocolly/colly/v2/queue"
 )
 
 func BFS(starts, ends string, con *config.Config) []byte {
@@ -70,8 +71,10 @@ func BFS(starts, ends string, con *config.Config) []byte {
 		if queueSize == 0 {
 			log.Println("No more links to check")
 			break
+			
 		} else {
 			log.Println("Article checked", scraper.ArticleCount)
+
 			queueInput = queueOutput
 			queueOutput, _ = queue.New(
 				con.MaxQueryThread,
