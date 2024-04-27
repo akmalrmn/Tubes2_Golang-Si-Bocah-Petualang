@@ -48,10 +48,10 @@ func NewTurboConfig() *Config {
 		MaxQueryThread: runtime.NumCPU(),
 		MaxQueueSize:   10000000,
 		LimitQueue:     20000,
-		RandomDelay:    1000 * time.Millisecond,
+		RandomDelay:    100 * time.Millisecond,
 		AllowedDomains: []string{"en.wikipedia.org"},
 		CacheDir:       "./cache",
-		MaxParallelism: 400,
+		MaxParallelism: 15,
 		MaxProcessor:   runtime.NumCPU(),
 		MaxThreads:     50000,
 	}

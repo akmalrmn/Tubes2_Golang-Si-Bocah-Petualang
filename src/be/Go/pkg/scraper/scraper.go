@@ -3,11 +3,9 @@ package scraper
 import (
 	"be/pkg/config"
 	"be/pkg/set"
-	"crypto/tls"
 	"github.com/gocolly/colly/v2"
 	"github.com/gocolly/colly/v2/queue"
 	"log"
-	"net/http"
 	"strings"
 	"sync"
 )
@@ -26,10 +24,6 @@ func QueueColly(input, output *queue.Queue, start, ends string, con *config.Conf
 		colly.CacheDir(con.CacheDir),
 		colly.AllowedDomains(con.AllowedDomains...),
 	)
-
-	c.WithTransport(&http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	})
 
 	// Round-robin Proxy
 	//rp, err := proxy.RoundRobinProxySwitcher(
