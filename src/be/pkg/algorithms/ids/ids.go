@@ -1,18 +1,18 @@
 package ids
 
 import (
-	"be/pkg/Result"
-	"be/pkg/set"
-	"context"
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
-	"strings"
-	"sync"
-	"time"
-
-	"github.com/gocolly/colly/v2"
+		"be/pkg/Result"
+		"be/pkg/set"
+		"context"
+		"encoding/json"
+    "fmt"
+    "log"
+		"sync/atomic"
+    "strings"
+    "sync"
+    "time"
+    "net/http"
+    "github.com/gocolly/colly/v2"
 )
 
 type contextTransport struct {
@@ -44,7 +44,7 @@ func collectorWithContext(c *colly.Collector, ctx context.Context) {
     c.WithTransport(trans)
 }
 
-type Result2 struct {
+type ResultAwal struct {
     Path          [][]string
     Degrees       int
     TimeTaken     time.Duration
@@ -52,9 +52,10 @@ type Result2 struct {
 }
 
 func IterativeDeepeningSearch(start, ends string) []byte {
-    start = "https://en.wikipedia.org/wiki/" + start
-    ends = "https://en.wikipedia.org/wiki/" + ends
-    log.Println(ends)
+	start = "https://en.wikipedia.org" + start
+	fmt.Println(start)
+		ends = "https://en.wikipedia.org" + ends
+		fmt.Println(ends)
     targetUrl := ends
 
     c := colly.NewCollector(
@@ -70,21 +71,20 @@ func IterativeDeepeningSearch(start, ends string) []byte {
         Parallelism: 15,
         Delay:       100 * time.Millisecond,
     })
-
+		var results = set.NewSetOfSlice()
     // The maximum depth for the IDS
-	var results = set.NewSetOfSlice()
     maxDepth := 6
     depths := make(map[string]int)
     // Mutex to protect the depths map
     var depthsMutex sync.RWMutex
     // WaitGroup to wait for all URLs to be visited
     var wg sync.WaitGroup
-    resultCh := make(chan *Result2)
+    resultCh := make(chan *ResultAwal)
     // Variable to store the least depth at which the target URL was found
     leastDepth := maxDepth + 1
-    var result Result2
+    var result ResultAwal
     // Counter for the number of links visited
-    var linksVisited int
+    var linksVisited int64
 
     // Map to store the parent-child relationship of each URL
     parents := make(map[string]string)
@@ -107,7 +107,7 @@ func IterativeDeepeningSearch(start, ends string) []byte {
 
     go func() {
         for range ticker.C {
-            fmt.Println("Number of links visited:", linksVisited)
+            fmt.Println("Number of links visited:", atomic.LoadInt64(&linksVisited))
             fmt.Println("Time taken:", time.Since(startTime))
         }
     }()
@@ -135,14 +135,14 @@ func IterativeDeepeningSearch(start, ends string) []byte {
                         parents[url] = e.Request.URL.String()
                         depthsMutex.Unlock()
                         if url == targetUrl && currentDepth+1 < leastDepth {
-                            // Create a new instance of Result for this goroutine
-                            goroutineResult := Result2{
+                            // Create a new instance of ResultAwal for this goroutine
+                            goroutineResult := ResultAwal{
                                 Degrees:      currentDepth + 1,
                                 TimeTaken:    time.Since(startTime),
-                                LinksVisited: linksVisited,
+                                LinksVisited: int(atomic.LoadInt64(&linksVisited)),
                             }
                             fmt.Println(url)
-                            fmt.Println("\nFound target URL at depth", leastDepth)
+                            fmt.Println("\nFound target URL at depth", goroutineResult.Degrees)
                             fmt.Println("Time taken:", goroutineResult.TimeTaken)
                             fmt.Println("Number of links visited:", goroutineResult.LinksVisited)
                             path := []string{url}
@@ -154,7 +154,7 @@ func IterativeDeepeningSearch(start, ends string) []byte {
                                 path = append([]string{parent}, path...)
                                 url = parent
                             }
-                            results.Add(path)
+														results.Add(path)
                             goroutineResult.Path = results.ToSlice()
                             // Send the result for this goroutine to the channel
                             resultCh <- &goroutineResult
@@ -170,7 +170,7 @@ func IterativeDeepeningSearch(start, ends string) []byte {
                                     log.Println("Error visiting URL:", url, "Error:", err)
                                 }
                             }()
-                            linksVisited++
+                            atomic.AddInt64(&linksVisited, 1)
                         }
                     } else {
                         depthsMutex.Unlock()
@@ -191,51 +191,55 @@ func IterativeDeepeningSearch(start, ends string) []byte {
     }()
 
     // Wait for the target URL to be found or all URLs to be visited
-    select {
-    case result := <-resultCh:
-        var graph Result.Graph
-	graph.GenerateGraph(results.ToSlice())
-
-	outputResult := Result.Result{
-		Traph:               graph,
-		Time:                result.TimeTaken.Milliseconds(),
-		TotalArticleChecked: result.LinksVisited,
-		TotalArtcleVisit:    graph.GetNodesCount(),
+		select {
+		case result := <-resultCh:
+			var graph Result.Graph
+			graph.GenerateGraph(results.ToSlice())
+	
+			outputResult := Result.Result{
+				Traph:               graph,
+				Time:                result.TimeTaken.Milliseconds(),
+				TotalArticleChecked: result.LinksVisited,
+				TotalArtcleVisit:    graph.GetNodesCount(),
+			}
+	
+			jsonOutput, err := json.Marshal(outputResult)
+	
+			if err != nil {
+				log.Println("Error marshalling JSON:", err)
+				return []byte(fmt.Sprintf(`{Error marshalling JSON : %v}`, err))
+			}
+	
+			log.Printf("JSON: %s\n", jsonOutput)
+			return jsonOutput
+	
+		// Target URL found, return the result
+		case <-ctx.Done():
+			// Context canceled, return nil to indicate failure
+			var graph Result.Graph
+			graph.GenerateGraph(results.ToSlice())
+	
+			outputResult := Result.Result{
+				Traph:               graph,
+				Time:                result.TimeTaken.Milliseconds(),
+				TotalArticleChecked: result.LinksVisited,
+				TotalArtcleVisit:    graph.GetNodesCount(),
+			}
+	
+			jsonOutput, err := json.Marshal(outputResult)
+	
+			if err != nil {
+				log.Println("Error marshalling JSON:", err)
+				cancel()
+				return []byte(fmt.Sprintf(`{Error marshalling JSON : %v}`, err))
+			}
+			// Print json
+			log.Printf("JSON: %s\n", jsonOutput)
+			return jsonOutput
+		}
 	}
+	
 
-	jsonOutput, err := json.Marshal(outputResult)
-
-	if err != nil {
-		log.Println("Error marshalling JSON:", err)
-		return []byte(fmt.Sprintf(`{Error marshalling JSON : %v}`, err))
-	}
-
-	return jsonOutput
-    
-        // Target URL found, return the result
-    case <-ctx.Done():
-        // Context canceled, return nil to indicate failure
-        var graph Result.Graph
-	graph.GenerateGraph(results.ToSlice())
-
-	outputResult := Result.Result{
-		Traph:               graph,
-		Time:                result.TimeTaken.Milliseconds(),
-		TotalArticleChecked: result.LinksVisited,
-		TotalArtcleVisit:    graph.GetNodesCount(),
-	}
-
-	jsonOutput, err := json.Marshal(outputResult)
-
-	if err != nil {
-		log.Println("Error marshalling JSON:", err)
-		return []byte(fmt.Sprintf(`{Error marshalling JSON : %v}`, err))
-	}
-
-	return jsonOutput
-    }
-
-}
 
 func isValidLink(link string) bool {
     prefixes := []string{
